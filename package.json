@@ -1,0 +1,68 @@
+{
+  "name": "fnfn",
+  "productName": "fnfn",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hold-to-talk desktop dictation lab with local speech-to-text on Linux",
+  "keywords": [
+    "electron",
+    "speech-to-text",
+    "whisper",
+    "linux",
+    "evdev",
+    "dictation"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "author": {
+    "name": "Ashish Khare",
+    "email": "flangdev3000@gmail.com"
+  },
+  "main": ".vite/build/main.cjs",
+  "scripts": {
+    "start": "electron-forge start -- --ozone-platform=x11",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "release": "electron-forge release",
+    "lint": "oxlint && oxfmt --check",
+    "lint:fix": "oxlint --fix && oxfmt --write",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "probe": "tsx scripts/probe-input.ts",
+    "fetch:needle": "bash scripts/fetch-needle.sh"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^8.0.1",
+    "@electron-forge/maker-deb": "^8.0.1",
+    "@electron-forge/maker-rpm": "^8.0.1",
+    "@electron-forge/maker-squirrel": "^8.0.1",
+    "@electron-forge/maker-zip": "^8.0.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^8.0.1",
+    "@electron-forge/plugin-fuses": "^8.0.1",
+    "@electron-forge/plugin-vite": "^8.0.1",
+    "@electron/fuses": "^2.1.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "45.0.0",
+    "oxfmt": "^0.41.0",
+    "oxlint": "^1.89.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "cn": "^0.5.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "lucide-react": "^1.61.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

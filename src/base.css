@@ -1,0 +1,198 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: clip;
+}
+
+html {
+  background: var(--color-shell);
+  color-scheme: dark;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--color-shell);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--color-orange);
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: break-word;
+  font-family: var(--font-body);
+  font-synthesis: none;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* The floating hold HUD is its own transparent, click-through window. */
+html.overlay-surface,
+html.overlay-surface body,
+html.overlay-surface #root {
+  background: transparent;
+}
+
+html.overlay-surface #root {
+  min-height: 0;
+}
+
+.overlay-card {
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  background: rgb(8 8 8 / 94%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  backdrop-filter: blur(12px);
+}
+
+.overlay-bar {
+  width: 2px;
+  min-height: 3px;
+  border-radius: 1px;
+  background: var(--color-ink);
+  opacity: 0.85;
+  transition: height 70ms linear;
+}
+
+.overlay-bar-head {
+  background: var(--color-orange);
+  opacity: 1;
+}
+
+.overlay-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-faint);
+}
+
+.overlay-dot-live {
+  background: var(--color-orange);
+  box-shadow: 0 0 0 3px rgb(255 90 31 / 16%);
+  animation: overlay-pulse 1.4s ease-in-out infinite;
+}
+
+.overlay-dot-busy {
+  background: var(--color-dim);
+  animation: overlay-pulse 1s ease-in-out infinite;
+}
+
+@keyframes overlay-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+img,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+svg {
+  display: block;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--color-orange);
+  color: var(--color-orange-ink);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--color-line-strong);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.skip {
+  position: absolute;
+  left: 16px;
+  top: -96px;
+  z-index: 500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--color-ink);
+  color: var(--color-panel);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+
+.skip:focus-visible {
+  top: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
