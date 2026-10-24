@@ -164,7 +164,9 @@ function createWindow(): void {
 }
 
 function overlayBounds(): Electron.Rectangle {
-  const { workArea } = screen.getPrimaryDisplay();
+  const { workArea } = screen.getDisplayNearestPoint(
+    screen.getCursorScreenPoint(),
+  );
   return {
     width: OVERLAY_WIDTH,
     height: OVERLAY_HEIGHT,

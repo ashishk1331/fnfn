@@ -14,8 +14,8 @@
   Whistle, and quiet speech can be trimmed; there is no per-user calibration.
 - Transcriptions are stored as plain text, unencrypted, in the app's user-data
   directory. Only the 200 most recent are kept.
-- The HUD uses the primary display only, and a compositor that refuses
-  always-on-top will keep it behind other windows.
+- A compositor that refuses always-on-top will keep the HUD behind other
+  windows.
 - No dictionary, snippets, styles, or tray icon yet.
 - Recording while another key is pressed is treated as a shortcut and
   cancelled, not as dictation.

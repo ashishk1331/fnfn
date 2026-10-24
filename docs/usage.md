@@ -52,8 +52,8 @@ evdev capture: only use this on a machine you control.
 
 ## Floating HUD
 
-While a hold is active, a compact card appears at the top center of the primary
-display: a dot, a state word, and a live waveform. It hides again shortly after
+While a hold is active, a compact card appears at the top center of the display
+under the pointer: a dot, a state word, and a live waveform. It hides again shortly after
 the transcript is done.
 
 The HUD is a separate frameless Electron window with these properties:
@@ -63,8 +63,8 @@ The HUD is a separate frameless Electron window with these properties:
 - `focusable: false` and shown with `showInactive()`, so the window you are
   dictating into keeps focus and insertion lands in the right place.
 - Click-through (`setIgnoreMouseEvents`), so it never blocks the screen under it.
-- Positioned from the primary display's work area and re-centered when display
-  metrics change. There is no timer or stop button: releasing the key ends the
+- Positioned from the active display's work area, re-centered on each hold and
+  when display metrics change. There is no timer or stop button: releasing the key ends the
   hold.
 
 Windows are positioned by the compositor on Wayland, and GNOME ignores the
