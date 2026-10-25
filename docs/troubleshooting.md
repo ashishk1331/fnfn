@@ -2,8 +2,13 @@
 
 ## Electron exits with a SUID sandbox error
 
-Fix the helper as described in [Setup](setup.md#electron-sandbox-on-linux), or
-run with `npm start -- --no-sandbox`.
+`npm start` already covers this: it checks the helper, prints the two `sudo`
+commands, and starts with `--no-sandbox` when the helper is not owned by root
+with mode `4755`. Run those commands (again after a reinstall) to get the
+sandbox back — see [Setup](setup.md#electron-sandbox-on-linux).
+
+Plain `npx electron-forge start` and the packaged binary skip that check, so
+there you have to add `--no-sandbox` yourself.
 
 ## The app prints `restarting with --ozone-platform=x11` and nothing appears
 

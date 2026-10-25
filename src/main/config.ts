@@ -16,6 +16,9 @@ export interface AppConfig {
   cactusCli: string;
   cactusModel: string;
   cactusLanguage: string;
+  needleCli: string;
+  needleModel: string;
+  tinyfishApiKey: string;
   ffmpegPath: string;
   keepAudio: boolean;
   textRules: TextRules;
@@ -29,6 +32,9 @@ interface SettingsFile {
   cactusCli?: string;
   cactusModel?: string;
   cactusLanguage?: string;
+  needleCli?: string;
+  needleModel?: string;
+  tinyfishApiKey?: string;
   ffmpegPath?: string;
   keepAudio?: boolean;
   textRules?: TextRules;
@@ -90,6 +96,18 @@ function defaultCactusModel(appRoot: string): string {
   return firstExisting(candidates) ?? candidates[0];
 }
 
+function defaultNeedleModel(appRoot: string): string {
+  const resources = process.resourcesPath;
+  const candidates = [
+    path.join(appRoot, 'vendor', 'needle', 'needle3.cact'),
+    ...(typeof resources === 'string'
+      ? [path.join(resources, 'needle', 'needle3.cact')]
+      : []),
+  ];
+
+  return firstExisting(candidates) ?? candidates[0];
+}
+
 function defaults(appRoot: string): AppConfig {
   return {
     holdKeyCode: 100, // KEY_RIGHTALT
@@ -99,6 +117,9 @@ function defaults(appRoot: string): AppConfig {
     cactusCli: defaultCactusCli(appRoot),
     cactusModel: defaultCactusModel(appRoot),
     cactusLanguage: 'auto',
+    needleCli: defaultCactusCli(appRoot),
+    needleModel: defaultNeedleModel(appRoot),
+    tinyfishApiKey: '',
     ffmpegPath: 'ffmpeg',
     keepAudio: false,
     textRules: DEFAULT_TEXT_RULES,
@@ -146,7 +167,10 @@ function normalize(
 
   return {
     ...base,
-    holdKeyCode: key !== undefined && key <= 0x2ff ? key : base.holdKeyCode,
+    holdKeyCode:
+      key !== undefined && key > 0 && key <= 0x2ff && key !== 57
+        ? key
+        : base.holdKeyCode,
     holdThresholdMs: safeThreshold,
     maxHoldMs: safeMax,
     insertTool,
@@ -163,6 +187,18 @@ function normalize(
       candidate.cactusLanguage.trim()
         ? candidate.cactusLanguage.trim()
         : base.cactusLanguage,
+    needleCli:
+      typeof candidate.needleCli === 'string' && candidate.needleCli.trim()
+        ? candidate.needleCli.trim()
+        : base.needleCli,
+    needleModel:
+      typeof candidate.needleModel === 'string' && candidate.needleModel.trim()
+        ? path.resolve(appRoot, candidate.needleModel.trim())
+        : base.needleModel,
+    tinyfishApiKey:
+      typeof candidate.tinyfishApiKey === 'string'
+        ? candidate.tinyfishApiKey.trim()
+        : base.tinyfishApiKey,
     ffmpegPath:
       typeof candidate.ffmpegPath === 'string' && candidate.ffmpegPath.trim()
         ? candidate.ffmpegPath.trim()
@@ -198,6 +234,15 @@ function environmentOverrides(appRoot: string): SettingsFile {
   }
   if (process.env.CACTUS_LANG) {
     overrides.cactusLanguage = process.env.CACTUS_LANG;
+  }
+  if (process.env.NEEDLE_CLI) {
+    overrides.needleCli = process.env.NEEDLE_CLI;
+  }
+  if (process.env.NEEDLE_MODEL) {
+    overrides.needleModel = path.resolve(appRoot, process.env.NEEDLE_MODEL);
+  }
+  if (process.env.TINYFISH_API_KEY) {
+    overrides.tinyfishApiKey = process.env.TINYFISH_API_KEY;
   }
   if (process.env.FFMPEG_PATH) {
     overrides.ffmpegPath = process.env.FFMPEG_PATH;

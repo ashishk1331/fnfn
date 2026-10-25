@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  applyCleanup,
   applyDictionary,
   applySnippets,
   applyStyle,
   applyTextRules,
+  DEFAULT_CLEANUP,
   formatRuleLines,
   keywordList,
   normalizeTextRules,
@@ -126,6 +128,81 @@ test('normalizeTextRules rejects invalid styles and empty rules', () => {
   assert.deepEqual(normalized.snippets, [
     { trigger: 'hi', expansion: 'hello' },
   ]);
+  assert.equal(normalized.context, '');
+  assert.deepEqual(normalized.cleanup, DEFAULT_CLEANUP);
+});
+
+test('cleanup turns spoken punctuation into marks and line breaks', () => {
+  assert.equal(
+    applyCleanup('hello comma world full stop', DEFAULT_CLEANUP),
+    'hello, world.',
+  );
+  assert.equal(
+    applyCleanup('first line new line second line', DEFAULT_CLEANUP),
+    'first line\nsecond line',
+  );
+  assert.equal(
+    applyCleanup('really question mark', DEFAULT_CLEANUP),
+    'really?',
+  );
+});
+
+test('cleanup drops fillers and fixes safe spelling slips', () => {
+  assert.equal(
+    applyCleanup('um, i dont know', DEFAULT_CLEANUP),
+    "I don't know",
+  );
+  assert.equal(
+    applyCleanup('this is alot teh same', DEFAULT_CLEANUP),
+    'this is a lot the same',
+  );
+  assert.equal(
+    applyCleanup('um i dont know', {
+      spokenPunctuation: false,
+      fillers: false,
+      commonFixes: false,
+    }),
+    'um i dont know',
+  );
+});
+
+test('rules clean up speech before applying corrections', () => {
+  const rules: TextRules = {
+    style: 'sentence',
+    dictionary: [{ from: 'cactus', to: 'Cactus' }],
+    snippets: [],
+    cleanup: DEFAULT_CLEANUP,
+  };
+
+  assert.equal(
+    applyTextRules('um, i use cactus full stop', rules),
+    'I use Cactus.',
+  );
+});
+
+test('normalizeTextRules keeps context and only overridden cleanup flags', () => {
+  const normalized = normalizeTextRules({
+    context: '  Working with TinyFish and Cactus.\n',
+    cleanup: { fillers: false },
+  });
+
+  assert.equal(normalized.context, 'Working with TinyFish and Cactus.');
+  assert.deepEqual(normalized.cleanup, {
+    spokenPunctuation: true,
+    fillers: false,
+    commonFixes: true,
+  });
+});
+
+test('decoder keywords include capitalised context terms', () => {
+  const words = keywordList({
+    style: 'raw',
+    dictionary: [],
+    snippets: [],
+    context: 'TinyFish API, Ashish, Berlin.',
+  });
+
+  assert.deepEqual(words, ['TinyFish', 'API', 'Ashish', 'Berlin']);
 });
 
 test('decoder keywords include dictionary words and snippet triggers', () => {

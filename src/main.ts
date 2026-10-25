@@ -7,6 +7,7 @@ import {
   nativeImage,
   screen,
   session,
+  shell,
   Tray,
   type IpcMainInvokeEvent,
 } from 'electron';
@@ -18,15 +19,25 @@ import { HistoryStore } from './main/history';
 import { insertTextAtCursor } from './main/insert';
 import { InputService } from './main/input-service';
 import { OVERLAY_BARS } from './lib/levels';
+import { SearchStore } from './main/search-store';
+import { ResearchService } from './main/research';
+import { sanitizeSourceUrl } from './shared/search';
 import { keyLabel, keyName } from './shared/keycodes';
 import { normalizeTextRules, type TextRules } from './shared/text-rules';
 import type {
+  AgentSettings,
   HistoryEntry,
   InputStatus,
   InsertResult,
   LearnEvent,
+  OverlayMode,
+  OverlayPhase,
+  OverlaySource,
   OverlayState,
+  SearchEntry,
+  SearchProgress,
   SttInfo,
+  TranscriptionMode,
   TranscriptionResult,
 } from './shared/types';
 import type { HoldUpdate } from './shared/hold-detector';
@@ -103,8 +114,13 @@ if (!hasSingleInstanceLock) {
 
 const OVERLAY_WIDTH = 208;
 const OVERLAY_HEIGHT = 40;
+const OVERLAY_SEARCH_WIDTH = 380;
+const OVERLAY_SEARCH_HEIGHT = 46;
+const OVERLAY_RESULT_WIDTH = 540;
+const OVERLAY_RESULT_HEIGHT = 232;
 const OVERLAY_TOP_INSET = 12;
 const OVERLAY_HIDE_DELAY_MS = 700;
+const OVERLAY_RESULT_HIDE_MS = 12_000;
 
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
@@ -113,10 +129,25 @@ let overlayHideTimer: ReturnType<typeof setTimeout> | null = null;
 let inputService: InputService | null = null;
 let sttService: SttService | null = null;
 let historyStore: HistoryStore | null = null;
+let searchStore: SearchStore | null = null;
+let researchService: ResearchService | null = null;
 let config: AppConfig;
 let textRules: TextRules;
 let isQuitting = false;
 let closeToTray = false;
+let lastOverlayShape: OverlayShape = { phase: 'idle', mode: 'dictate' };
+
+const OVERLAY_PHASES: readonly OverlayPhase[] = [
+  'idle',
+  'pending',
+  'recording',
+  'transcribing',
+  'searching',
+  'reading',
+  'answering',
+  'done',
+  'error',
+];
 
 function assetPath(...parts: string[]): string {
   return path.join(app.getAppPath(), 'assets', ...parts);
@@ -228,14 +259,40 @@ function createWindow(): void {
   });
 }
 
-function overlayBounds(): Electron.Rectangle {
+interface OverlayShape {
+  phase: OverlayPhase;
+  mode: OverlayMode;
+}
+
+function overlaySize(state?: OverlayShape): {
+  width: number;
+  height: number;
+} {
+  if (state?.phase === 'done' || state?.phase === 'error') {
+    return { width: OVERLAY_RESULT_WIDTH, height: OVERLAY_RESULT_HEIGHT };
+  }
+
+  if (
+    state?.mode === 'search' ||
+    state?.phase === 'searching' ||
+    state?.phase === 'reading' ||
+    state?.phase === 'answering'
+  ) {
+    return { width: OVERLAY_SEARCH_WIDTH, height: OVERLAY_SEARCH_HEIGHT };
+  }
+
+  return { width: OVERLAY_WIDTH, height: OVERLAY_HEIGHT };
+}
+
+function overlayBounds(state?: OverlayShape): Electron.Rectangle {
+  const { width, height } = overlaySize(state);
   const { workArea } = screen.getDisplayNearestPoint(
     screen.getCursorScreenPoint(),
   );
   return {
-    width: OVERLAY_WIDTH,
-    height: OVERLAY_HEIGHT,
-    x: Math.round(workArea.x + (workArea.width - OVERLAY_WIDTH) / 2),
+    width,
+    height,
+    x: Math.round(workArea.x + (workArea.width - width) / 2),
     y: workArea.y + OVERLAY_TOP_INSET,
   };
 }
@@ -284,18 +341,18 @@ function createOverlayWindow(): void {
   });
 }
 
-function showOverlay(): void {
+function showOverlay(state?: OverlayShape): void {
   if (!overlayWindow || overlayWindow.isDestroyed()) {
     return;
   }
 
-  overlayWindow.setBounds(overlayBounds());
+  overlayWindow.setBounds(overlayBounds(state));
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
   }
 }
 
-function hideOverlayAfterIdle(): void {
+function hideOverlayAfter(delayMs: number): void {
   if (overlayHideTimer) {
     clearTimeout(overlayHideTimer);
   }
@@ -305,16 +362,20 @@ function hideOverlayAfterIdle(): void {
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.hide();
     }
-  }, OVERLAY_HIDE_DELAY_MS);
+  }, delayMs);
+}
+
+function overlayText(value: unknown, max: number): string | undefined {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, max)
+    : undefined;
 }
 
 function normalizeOverlayState(payload: OverlayState): OverlayState {
-  const phase =
-    payload?.phase === 'pending' ||
-    payload?.phase === 'recording' ||
-    payload?.phase === 'transcribing'
-      ? payload.phase
-      : 'idle';
+  const phase = OVERLAY_PHASES.includes(payload?.phase)
+    ? payload.phase
+    : 'idle';
+  const mode: OverlayMode = payload?.mode === 'search' ? 'search' : 'dictate';
   const levels = Array.isArray(payload?.levels)
     ? payload.levels
         .slice(-OVERLAY_BARS)
@@ -322,8 +383,41 @@ function normalizeOverlayState(payload: OverlayState): OverlayState {
           Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0,
         )
     : [];
+  const sources: OverlaySource[] = Array.isArray(payload?.sources)
+    ? payload.sources
+        .slice(0, 4)
+        .map((source): OverlaySource | null => {
+          const url =
+            typeof source?.url === 'string'
+              ? sanitizeSourceUrl(source.url)
+              : null;
+          if (!url) {
+            return null;
+          }
+          const title = overlayText(source?.title, 120) ?? url;
+          return { title, url };
+        })
+        .filter((source): source is OverlaySource => source !== null)
+    : [];
 
-  return { phase, levels };
+  const state: OverlayState = { phase, mode, levels };
+  const query = overlayText(payload?.query, 300);
+  const answer = overlayText(payload?.answer, 600);
+  const message = overlayText(payload?.message, 300);
+  if (query) {
+    state.query = query;
+  }
+  if (answer) {
+    state.answer = answer;
+  }
+  if (message) {
+    state.message = message;
+  }
+  if (sources.length > 0) {
+    state.sources = sources;
+  }
+
+  return state;
 }
 
 function handleOverlayState(payload: OverlayState): void {
@@ -332,10 +426,11 @@ function handleOverlayState(payload: OverlayState): void {
   }
 
   const state = normalizeOverlayState(payload);
+  lastOverlayShape = { phase: state.phase, mode: state.mode };
   overlayWindow.webContents.send('overlay:update', state);
 
   if (state.phase === 'idle') {
-    hideOverlayAfterIdle();
+    hideOverlayAfter(OVERLAY_HIDE_DELAY_MS);
     return;
   }
 
@@ -343,7 +438,11 @@ function handleOverlayState(payload: OverlayState): void {
     clearTimeout(overlayHideTimer);
     overlayHideTimer = null;
   }
-  showOverlay();
+  showOverlay(state);
+
+  if (state.phase === 'done' || state.phase === 'error') {
+    hideOverlayAfter(OVERLAY_RESULT_HIDE_MS);
+  }
 }
 
 function focusMainWindow(): void {
@@ -359,6 +458,28 @@ function focusMainWindow(): void {
 
 if (hasSingleInstanceLock) {
   app.on('second-instance', focusMainWindow);
+}
+
+async function currentAgentSettings(): Promise<AgentSettings> {
+  const tinyfishFromEnv = Boolean(process.env.TINYFISH_API_KEY);
+  const tinyfishConfigured = Boolean(config.tinyfishApiKey);
+  const needleReady = (await researchService?.needleReady()) ?? false;
+
+  let tinyfishHint = 'Add a TinyFish API key to enable web search.';
+  if (tinyfishFromEnv) {
+    tinyfishHint =
+      'Using TINYFISH_API_KEY from the environment. It wins over a saved key.';
+  } else if (tinyfishConfigured) {
+    tinyfishHint = 'TinyFish key saved. Search is ready.';
+  }
+
+  return {
+    tinyfishConfigured,
+    tinyfishFromEnv,
+    tinyfishHint,
+    needleReady,
+    needleModel: path.basename(config.needleModel),
+  };
 }
 
 function registerIpc(): void {
@@ -427,13 +548,21 @@ function registerIpc(): void {
       _event: IpcMainInvokeEvent,
       audio: ArrayBuffer,
       durationMs: number,
+      mode?: TranscriptionMode,
     ): Promise<TranscriptionResult> => {
       if (!sttService) {
         throw new Error('STT service is not ready yet.');
       }
-      const result = await sttService.transcribe(audio, durationMs);
 
-      if (!result.skipped && result.text) {
+      const transcriptionMode: TranscriptionMode =
+        mode === 'search' ? 'search' : 'dictate';
+      const result = await sttService.transcribe(
+        audio,
+        durationMs,
+        transcriptionMode,
+      );
+
+      if (transcriptionMode === 'dictate' && !result.skipped && result.text) {
         historyStore?.add({ text: result.text });
         broadcast('history:changed', null);
       }
@@ -504,6 +633,63 @@ function registerIpc(): void {
   ipcMain.handle('history:clear', (): void => {
     historyStore?.clear();
   });
+
+  ipcMain.handle(
+    'search:run',
+    async (_event: IpcMainInvokeEvent, text: string): Promise<SearchEntry> => {
+      if (typeof text !== 'string' || !text.trim()) {
+        throw new Error('Say a question before searching.');
+      }
+      if (!researchService || !searchStore) {
+        throw new Error('Search is not ready yet.');
+      }
+
+      const result = await researchService.run(text.trim());
+      const entry = searchStore.add(result);
+      broadcast('search:changed', null);
+      return entry;
+    },
+  );
+
+  ipcMain.handle('search:list', (): SearchEntry[] => {
+    return searchStore ? searchStore.getAll() : [];
+  });
+
+  ipcMain.handle('search:clear', (): void => {
+    searchStore?.clear();
+    broadcast('search:changed', null);
+  });
+
+  ipcMain.handle('agent:settings', (): Promise<AgentSettings> => {
+    return currentAgentSettings();
+  });
+
+  ipcMain.handle(
+    'agent:set-tinyfish',
+    async (_event: IpcMainInvokeEvent, key: string): Promise<AgentSettings> => {
+      if (typeof key !== 'string') {
+        throw new Error('The TinyFish key must be a string.');
+      }
+
+      const trimmed = key.trim().slice(0, 300);
+      saveSettings(app.getPath('userData'), { tinyfishApiKey: trimmed });
+      config.tinyfishApiKey = trimmed;
+      researchService?.setTinyfishKey(trimmed);
+
+      return currentAgentSettings();
+    },
+  );
+
+  ipcMain.handle(
+    'app:open-external',
+    async (_event: IpcMainInvokeEvent, url: string): Promise<void> => {
+      const safe = typeof url === 'string' ? sanitizeSourceUrl(url) : null;
+      if (!safe) {
+        throw new Error('Only http and https links can be opened.');
+      }
+      await shell.openExternal(safe);
+    },
+  );
 }
 
 app
@@ -518,6 +704,15 @@ app
     config = loadConfig(userDataDir, appRoot);
     textRules = config.textRules;
     historyStore = new HistoryStore(userDataDir);
+    searchStore = new SearchStore(userDataDir);
+    researchService = new ResearchService({
+      needleCli: config.needleCli,
+      needleModel: config.needleModel,
+      tinyfishApiKey: config.tinyfishApiKey,
+      onProgress: (progress: SearchProgress) => {
+        broadcast('search:progress', progress);
+      },
+    });
 
     session.defaultSession.setPermissionRequestHandler(
       (webContents, permission, callback) => {
@@ -569,7 +764,7 @@ app
 
     const replaceOverlay = (): void => {
       if (overlayWindow && !overlayWindow.isDestroyed()) {
-        overlayWindow.setBounds(overlayBounds());
+        overlayWindow.setBounds(overlayBounds(lastOverlayShape));
       }
     };
     screen.on('display-metrics-changed', replaceOverlay);
@@ -609,6 +804,7 @@ app.on('before-quit', () => {
     overlayHideTimer = null;
   }
   void sttService?.stopPreview();
+  researchService?.cancel();
   tray?.destroy();
   tray = null;
   inputService?.stop();

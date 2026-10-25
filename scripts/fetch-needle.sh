@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Fetch the prebuilt Cactus Whistle engine and weights into vendor/needle.
-# Override the location with CACTUS_CLI and CACTUS_MODEL instead if you
-# already have them somewhere else.
+# Fetch the prebuilt Cactus engine plus the Whistle (speech) and Needle
+# (query extraction) weights into vendor/needle. Override the locations with
+# CACTUS_CLI, CACTUS_MODEL, NEEDLE_CLI, and NEEDLE_MODEL if you already have
+# them somewhere else.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,6 +35,14 @@ else
   echo "Fetching whistle.cact (16.9 MB)"
   curl -fL --progress-bar -o "$dest/whistle.cact" \
     "$base/whistle/resolve/main/whistle.cact"
+fi
+
+if [ -f "$dest/needle3.cact" ]; then
+  echo "Using the existing $dest/needle3.cact"
+else
+  echo "Fetching needle3.cact (34 MB)"
+  curl -fL --progress-bar -o "$dest/needle3.cact" \
+    "$base/needle3/resolve/main/needle3.cact"
 fi
 
 echo "Ready: $dest"

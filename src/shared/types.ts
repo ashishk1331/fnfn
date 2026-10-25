@@ -42,11 +42,74 @@ export interface TranscriptionResult {
   skipped?: string;
 }
 
-export type OverlayPhase = 'idle' | 'pending' | 'recording' | 'transcribing';
+export type TranscriptionMode = 'dictate' | 'search';
+
+export type OverlayMode = 'dictate' | 'search';
+
+export type OverlayPhase =
+  | 'idle'
+  | 'pending'
+  | 'recording'
+  | 'transcribing'
+  | 'searching'
+  | 'reading'
+  | 'answering'
+  | 'done'
+  | 'error';
+
+export interface OverlaySource {
+  title: string;
+  url: string;
+}
 
 export interface OverlayState {
   phase: OverlayPhase;
+  mode: OverlayMode;
   levels: number[];
+  query?: string;
+  answer?: string;
+  sources?: OverlaySource[];
+  message?: string;
+}
+
+export interface SearchSource {
+  title: string;
+  url: string;
+  site: string;
+}
+
+export interface SearchResult {
+  /** The raw transcript that started the search. */
+  spoken: string;
+  /** The query Needle extracted, or the spoken text when extraction failed. */
+  query: string;
+  answer: string;
+  sources: SearchSource[];
+  confidence: number;
+  elapsedMs: number;
+  /** True when the spoken text was used as the query directly. */
+  fallback: boolean;
+}
+
+export interface SearchEntry extends SearchResult {
+  id: string;
+  timestamp: number;
+}
+
+export type SearchPhase = 'query' | 'searching' | 'reading' | 'answering';
+
+export interface SearchProgress {
+  phase: SearchPhase;
+  query: string;
+  message: string;
+}
+
+export interface AgentSettings {
+  tinyfishConfigured: boolean;
+  tinyfishFromEnv: boolean;
+  tinyfishHint: string;
+  needleReady: boolean;
+  needleModel: string;
 }
 
 export type InsertTool = 'xdotool' | 'ydotool' | 'wtype';
@@ -77,11 +140,22 @@ export interface FnfnApi {
   transcribe: (
     audio: ArrayBuffer,
     durationMs: number,
+    mode?: TranscriptionMode,
   ) => Promise<TranscriptionResult>;
   startPreview: () => void;
   pushPreviewAudio: (chunk: ArrayBuffer) => void;
   stopPreview: () => void;
   onPartial: (callback: (text: string) => void) => () => void;
+  runSearch: (text: string) => Promise<SearchEntry>;
+  onSearchProgress: (
+    callback: (progress: SearchProgress) => void,
+  ) => () => void;
+  getSearches: () => Promise<SearchEntry[]>;
+  clearSearches: () => Promise<void>;
+  onSearchChanged: (callback: () => void) => () => void;
+  getAgentSettings: () => Promise<AgentSettings>;
+  setTinyfishKey: (key: string) => Promise<AgentSettings>;
+  openExternal: (url: string) => Promise<void>;
   getTextRules: () => Promise<TextRules>;
   setTextRules: (rules: TextRules) => Promise<TextRules>;
   copyText: (text: string) => Promise<void>;

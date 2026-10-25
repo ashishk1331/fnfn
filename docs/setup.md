@@ -8,16 +8,21 @@ npm run fetch:needle
 npm start
 ```
 
-`npm run fetch:needle` downloads the prebuilt engine for this machine and
-`whistle.cact` into `vendor/needle/`. The app never downloads anything at
-runtime, so this is the only step that needs a network.
+`npm run fetch:needle` downloads the prebuilt engine for this machine,
+`whistle.cact`, and `needle3.cact` into `vendor/needle/`. Models are never
+downloaded at runtime; web answers make TinyFish requests only while you use the
+search chord. Add a TinyFish key in **System → Web answers** or set
+`TINYFISH_API_KEY` to enable them.
 
 `npm start` passes `--ozone-platform=x11` to Electron. GNOME ignores the window
 position a native Wayland client asks for, and the HUD would not stay at the top
-center otherwise. Extra flags go after a single `--`:
+center otherwise. It also adds `--no-sandbox` when the sandbox helper is not set
+up, and prints the commands that fix it (see
+[Electron sandbox on Linux](#electron-sandbox-on-linux)). Extra flags go after a
+single `--`:
 
 ```bash
-npm start -- --no-sandbox
+npm start -- --enable-logging
 ```
 
 To start without the XWayland flag:
@@ -52,17 +57,17 @@ downloaded engine.
 ## Electron sandbox on Linux
 
 The Electron `chrome-sandbox` helper must be owned by root and mode `4755`.
-If `npm start` reports a `setuid_sandbox_host` error, fix the helper:
+`npm install` leaves it owned by your user, and Chromium then aborts before any
+window appears. `scripts/start.ts` checks the helper first: when it is not set
+up, `npm start` prints the commands below and passes `--no-sandbox`, so the app
+still opens. Fix the helper to get the sandbox back:
 
 ```bash
 sudo chown root:root node_modules/electron/dist/chrome-sandbox
 sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
 ```
 
-Or run the development build without the sandbox:
-
-```bash
-npm start -- --no-sandbox
-```
-
-Prefer fixing the helper when you can: `--no-sandbox` lowers process isolation.
+A reinstall brings the helper back unconfigured, so repeat this after
+`npm install`. Prefer it when you can: `--no-sandbox` lowers process isolation.
+The check lives in the dev script only, so `npx electron-forge start` and the
+packaged binary still need `--no-sandbox` passed by hand.

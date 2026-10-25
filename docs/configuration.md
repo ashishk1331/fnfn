@@ -11,14 +11,20 @@ Environment variables override the saved settings file:
 | `CACTUS_CLI`        | `vendor/needle/<platform>/needle` | Path to the prebuilt engine              |
 | `CACTUS_MODEL`      | `vendor/needle/whistle.cact`      | Path to the Whistle weights              |
 | `CACTUS_LANG`       | `auto`                            | Whistle language, or `auto`              |
+| `NEEDLE_CLI`        | same as `CACTUS_CLI`              | Engine path for query extraction         |
+| `NEEDLE_MODEL`      | `vendor/needle/needle3.cact`      | Path to the Needle3 weights              |
+| `TINYFISH_API_KEY`  | unset                             | Key for web answers; wins over the UI    |
 | `FFMPEG_PATH`       | `ffmpeg`                          | Path to ffmpeg                           |
 | `FN_KEEP_AUDIO`     | unset                             | Set to `1` to keep converted WAV files   |
 | `FN_NATIVE_WAYLAND` | unset                             | `1` skips the packaged XWayland relaunch |
 | `FN_DEVTOOLS`       | unset                             | Set to `1` to open DevTools              |
 
 The settings file lives in the Electron user-data directory as
-`fnfn-settings.json`. Its `textRules` field holds the dictionary, snippets, and
-style from **System → Dictation text**; edit them in the UI rather than by hand.
+`fnfn-settings.json`. Its `textRules` field holds cleanup, dictionary, snippets,
+context, and style from **System → Dictation text**; edit them in the UI rather
+than by hand. `tinyfishApiKey` stores a key saved through **System → Web
+answers**. It is plain text like the rest of the settings file, so prefer the
+environment variable on a shared machine.
 
 ## Whistle
 
@@ -68,3 +74,37 @@ that clip. Each pass starts from the beginning, so the preview is stable, and
 the accumulated WAV is replaced by the VAD-trimmed version. When the key is
 released, the preview session is aborted and the complete recording goes
 through one plain engine pass; only that final text is typed and stored.
+
+## Needle and TinyFish
+
+`npm run fetch:needle` also downloads `needle3.cact` (about 34 MB) beside the
+Whistle weights. The same engine binary runs it with a tool schema. fnfn gives
+Needle one job: turn the cleaned transcript into a short web query. It does not
+write the answer. A 121M-parameter model that is good at structured extraction
+is not a reliable writer, and an invented answer is worse than a quoted one.
+
+The answer itself is extractive and deterministic:
+
+```text
+speech
+  -> Whistle transcript
+  -> cleanup + dictionary
+  -> Needle: "Web search: ..." -> { query }
+  -> TinyFish search (up to 6 results)
+  -> score snippet sentences against the query
+       |
+       +-- good score: quote the best sentence
+       |
+       +-- weak score: TinyFish fetch on the top 2 pages, score again
+  -> answer + up to 4 sources
+```
+
+TinyFish search uses `GET https://api.search.tinyfish.ai?query=...` with the
+`X-API-Key` header. The fetch fallback uses `POST https://api.fetch.tinyfish.ai`
+with `format: "markdown"` and a 15 second per-URL timeout. Only the query and
+result URLs leave the machine; audio and transcripts of normal dictation stay
+local.
+
+Get a key from <https://tinyfish.ai>, then paste it in **System → Web answers**
+or export `TINYFISH_API_KEY`. The environment value wins. Free-tier limits and
+an invalid key are reported in the HUD and in **Search**.

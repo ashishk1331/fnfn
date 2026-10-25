@@ -15,6 +15,34 @@ successful transcription is also listed in **Events**, newest first.
 Pressing another key while holding the talk key is treated as a shortcut and
 cancels the hold.
 
+## Web answers
+
+Hold the talk key and **Space** together, ask a question, then release either
+key. fnfn transcribes the question, asks Needle for a short search query, and
+queries TinyFish. The answer is quoted from the results and never typed into
+the focused window.
+
+- The chord has a 250 ms threshold. Tap Space on its own, or release it early,
+  and the hold stays a normal dictation, so `Alt+Space` shortcuts in other apps
+  still work.
+- **Space** cannot be chosen as the talk key. **Change** in **System** rejects
+  it with a hint.
+- Cleanup and the dictionary still apply, because they repair the question.
+  Snippets and style do not, because the text is a search query rather than
+  prose.
+- The floating card shows **Searching**, **Reading**, **Answering**, then the
+  answer with its source domains. It hides after twelve seconds.
+- Every search is kept in **Search**, newest first, with the query, the answer,
+  the domains, and what fnfn heard. Click a source to open it in the default
+  browser.
+- If the snippet is too thin to answer, fnfn fetches the top two pages and
+  tries again. It does not run a wider agent loop.
+- A missing Needle model, a missing TinyFish key, a rate limit, or a network
+  failure is shown in the card and in **Search**; dictation keeps working.
+
+Search results are stored as plain text in `fnfn-searches.json`. The query and
+the result URLs go to TinyFish; recorded audio never does.
+
 ## Live words
 
 From about a second into a hold, **Live** starts showing words before you
@@ -39,7 +67,8 @@ become unreachable.
 
 Open **System** and press **Change**, then press the key you want. Learning mode
 accepts any key that reaches evdev, including Fn when the keyboard exposes it.
-The choice is saved in the app's settings file.
+**Space** is rejected because it is the search chord. The choice is saved in the
+app's settings file.
 
 ## Insert at cursor
 
@@ -74,7 +103,10 @@ evdev capture: only use this on a machine you control.
 
 While a hold is active, a compact card appears at the top center of the display
 under the pointer: a dot, a state word, and a live waveform. It hides again shortly after
-the transcript is done.
+the transcript is done. A web hold uses the same card: the compact pill shows a
+**WEB** badge while it records and searches, then grows into a result card with
+the query, the answer, and the source domains. The card resizes itself for each
+phase (208×40 for dictation, 380×46 while searching, 540×232 for a result).
 
 The HUD is a separate frameless Electron window with these properties:
 

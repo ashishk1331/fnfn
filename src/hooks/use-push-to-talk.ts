@@ -6,12 +6,18 @@ import type {
   InputStatus,
   InsertResult,
   LearnEvent,
+  OverlayMode,
+  OverlayPhase,
+  OverlaySource,
+  SearchEntry,
+  SearchProgress,
+  TranscriptionMode,
   TranscriptionResult,
 } from '@/shared/types';
 import { describeError } from '@/lib/format';
 import { levelFromSamples, OVERLAY_BARS, pushLevel } from '@/lib/levels';
 
-export type Phase = 'idle' | 'pending' | 'recording' | 'transcribing' | 'error';
+export type Phase = OverlayPhase;
 
 export interface TranscriptView {
   text: string;
@@ -22,6 +28,13 @@ export interface TranscriptView {
 export interface Note {
   text: string;
   tone: 'warn' | 'error';
+}
+
+interface SearchDisplay {
+  query?: string;
+  answer?: string;
+  sources?: OverlaySource[];
+  message?: string;
 }
 
 interface CaptureSession {
@@ -65,9 +78,16 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
   });
   const [note, setNote] = useState<Note | null>(null);
   const [micReady, setMicReady] = useState(false);
+  const [mode, setModeState] = useState<OverlayMode>('dictate');
+  const [search, setSearch] = useState<SearchEntry | null>(null);
+  const [display, setDisplay] = useState<SearchDisplay>({});
 
   const statusRef = useRef(inputStatus);
   const phaseRef = useRef<Phase>('idle');
+  const modeRef = useRef<OverlayMode>('dictate');
+  const displayRef = useRef<SearchDisplay>({});
+  const searchGenerationRef = useRef(0);
+  const searchingRef = useRef(false);
   const rafRef = useRef(0);
   const captureRef = useRef<Promise<CaptureSession | null> | null>(null);
   const generationRef = useRef(0);
@@ -134,6 +154,24 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
   const setPhase = useCallback((next: Phase) => {
     phaseRef.current = next;
     setPhaseState(next);
+  }, []);
+
+  const setMode = useCallback((next: OverlayMode) => {
+    modeRef.current = next;
+    setModeState(next);
+  }, []);
+
+  const updateDisplay = useCallback((patch: SearchDisplay) => {
+    displayRef.current = { ...displayRef.current, ...patch };
+    setDisplay(displayRef.current);
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    searchGenerationRef.current += 1;
+    searchingRef.current = false;
+    setSearch(null);
+    displayRef.current = {};
+    setDisplay({});
   }, []);
 
   const startProgress = useCallback((pressedAt: number) => {
@@ -342,8 +380,62 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
     [],
   );
 
+  const runSearchFlow = useCallback(
+    async (text: string) => {
+      const generation = searchGenerationRef.current + 1;
+      searchGenerationRef.current = generation;
+      searchingRef.current = true;
+      setMode('search');
+      setSearch(null);
+      updateDisplay({
+        query: text,
+        answer: undefined,
+        sources: undefined,
+        message: undefined,
+      });
+      setPhase('searching');
+
+      try {
+        if (
+          !bridgeAvailable() ||
+          typeof window.fnfn?.runSearch !== 'function'
+        ) {
+          throw new Error('The main process bridge is missing.');
+        }
+
+        const entry = await window.fnfn.runSearch(text);
+        if (searchGenerationRef.current !== generation) {
+          return;
+        }
+
+        setSearch(entry);
+        updateDisplay({
+          query: entry.query,
+          answer: entry.answer,
+          sources: entry.sources.map(({ title, url }) => ({ title, url })),
+          message: undefined,
+        });
+        setPhase('done');
+        setNote(null);
+      } catch (error) {
+        if (searchGenerationRef.current !== generation) {
+          return;
+        }
+        const message = describeError(error);
+        updateDisplay({ message });
+        setPhase('error');
+        setNote({ text: `Search failed: ${message}`, tone: 'error' });
+      } finally {
+        if (searchGenerationRef.current === generation) {
+          searchingRef.current = false;
+        }
+      }
+    },
+    [setMode, setPhase, updateDisplay],
+  );
+
   const enqueueTranscription = useCallback(
-    (blob: Blob, heldMs: number) => {
+    (blob: Blob, heldMs: number, mode: TranscriptionMode) => {
       queueRef.current = queueRef.current
         .then(async () => {
           if (phaseRef.current === 'idle') {
@@ -358,8 +450,29 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
             const result = await window.fnfn.transcribe(
               await blob.arrayBuffer(),
               heldMs,
+              mode,
             );
             renderResult(result);
+
+            if (mode === 'search') {
+              if (!result.text || result.skipped) {
+                const message =
+                  result.skipped === 'silence'
+                    ? 'No speech detected.'
+                    : 'That hold was too short to search.';
+                updateDisplay({ message });
+                setPhase('error');
+                setNote({
+                  text: `${message} Hold the talk key with Space and ask again.`,
+                  tone: 'warn',
+                });
+                return;
+              }
+
+              void runSearchFlow(result.text);
+              return;
+            }
+
             const insertion = result.text
               ? await insertTranscript(result.text)
               : null;
@@ -393,6 +506,14 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
             }
           } catch (error) {
             const message = describeError(error);
+
+            if (mode === 'search') {
+              updateDisplay({ message });
+              setPhase('error');
+              setNote({ text: `Search failed: ${message}`, tone: 'error' });
+              return;
+            }
+
             setTranscript({
               text: `Transcription failed: ${message}`,
               empty: false,
@@ -402,7 +523,7 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
               setNote(null);
             }
           } finally {
-            if (phaseRef.current === 'transcribing') {
+            if (mode === 'dictate' && phaseRef.current === 'transcribing') {
               setPhase('idle');
             }
           }
@@ -411,11 +532,15 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
           // Keep the queue alive even if a render step throws.
         });
     },
-    [insertTranscript, renderResult, setPhase],
+    [insertTranscript, renderResult, runSearchFlow, setPhase, updateDisplay],
   );
 
   const finishCapture = useCallback(
-    (qualified: boolean, heldMs: number) => {
+    (
+      qualified: boolean,
+      heldMs: number,
+      captureMode: TranscriptionMode = 'dictate',
+    ) => {
       generationRef.current += 1;
       window.fnfn?.stopPreview?.();
       const pending = captureRef.current;
@@ -469,7 +594,7 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
             return;
           }
 
-          enqueueTranscription(blob, heldMs);
+          enqueueTranscription(blob, heldMs, captureMode);
         })
         .catch((error: unknown) => {
           if (phaseRef.current === 'transcribing') {
@@ -488,6 +613,8 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
     (update: HoldUpdate) => {
       switch (update.type) {
         case 'pending': {
+          clearSearch();
+          setMode('dictate');
           setPhase('pending');
           startProgress(update.at);
           previousTranscriptRef.current = transcriptRef.current;
@@ -500,7 +627,14 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
         case 'start': {
           cancelAnimationFrame(rafRef.current);
           setProgress(1);
+          setMode(update.mode);
           setPhase('recording');
+          setNote(null);
+          break;
+        }
+
+        case 'mode': {
+          setMode('search');
           setNote(null);
           break;
         }
@@ -522,12 +656,14 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
             });
           }
 
-          finishCapture(update.qualified, update.heldMs);
+          finishCapture(update.qualified, update.heldMs, update.mode);
           break;
         }
 
         case 'cancel': {
           resetProgress();
+          clearSearch();
+          setMode('dictate');
           setPhase('idle');
           setTranscript(previousTranscriptRef.current);
           setNote({
@@ -542,7 +678,15 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
         }
       }
     },
-    [beginCapture, finishCapture, resetProgress, setPhase, startProgress],
+    [
+      beginCapture,
+      clearSearch,
+      finishCapture,
+      resetProgress,
+      setMode,
+      setPhase,
+      startProgress,
+    ],
   );
 
   const handleLearn = useCallback((event: LearnEvent) => {
@@ -594,12 +738,17 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
     }
 
     levelsRef.current = pushLevel(levelsRef.current, level);
+
+    // Dictation failures surface in the main window's note. The HUD's error
+    // state is a search result card, so a dictate error just dismisses it.
+    const overlayPhase =
+      next === 'error' && modeRef.current !== 'search' ? 'idle' : next;
+
     window.fnfn.setOverlayState({
-      phase:
-        next === 'pending' || next === 'recording' || next === 'transcribing'
-          ? next
-          : 'idle',
+      phase: overlayPhase,
+      mode: modeRef.current,
       levels: levelsRef.current,
+      ...displayRef.current,
     });
   }, []);
 
@@ -615,7 +764,27 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
 
     const timer = window.setInterval(() => sendOverlay('recording'), 50);
     return () => window.clearInterval(timer);
-  }, [phase, sendOverlay]);
+  }, [display, mode, phase, sendOverlay]);
+
+  useEffect(() => {
+    if (
+      !bridgeAvailable() ||
+      typeof window.fnfn?.onSearchProgress !== 'function'
+    ) {
+      return;
+    }
+
+    return window.fnfn.onSearchProgress((progress: SearchProgress) => {
+      if (!searchingRef.current) {
+        return;
+      }
+      updateDisplay({
+        ...(progress.query ? { query: progress.query } : {}),
+        message: progress.message,
+      });
+      setPhase(progress.phase === 'query' ? 'searching' : progress.phase);
+    });
+  }, [setPhase, updateDisplay]);
 
   useEffect(() => {
     if (!bridgeAvailable()) {
@@ -695,6 +864,8 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
 
   return {
     phase,
+    mode,
+    search,
     progress,
     transcript,
     note,

@@ -10,10 +10,22 @@ export interface Snippet {
   expansion: string;
 }
 
+export interface CleanupRules {
+  /** "comma", "full stop", "new line" and friends become punctuation. */
+  spokenPunctuation: boolean;
+  /** Drop um, uh, erm, hmm and similar hesitations. */
+  fillers: boolean;
+  /** Fix safe spelling slips such as "dont" and a lowercase "i". */
+  commonFixes: boolean;
+}
+
 export interface TextRules {
   style: TextStyle;
   dictionary: DictionaryEntry[];
   snippets: Snippet[];
+  /** Names, products, and places that bias the decoder and clarify intent. */
+  context?: string;
+  cleanup?: CleanupRules;
 }
 
 export const TEXT_STYLES: readonly TextStyle[] = [
@@ -24,14 +36,23 @@ export const TEXT_STYLES: readonly TextStyle[] = [
   'title',
 ];
 
+export const DEFAULT_CLEANUP: CleanupRules = {
+  spokenPunctuation: true,
+  fillers: true,
+  commonFixes: true,
+};
+
 export const DEFAULT_TEXT_RULES: TextRules = {
   style: 'raw',
   dictionary: [],
   snippets: [],
+  context: '',
+  cleanup: DEFAULT_CLEANUP,
 };
 
 export const MAX_RULE_ENTRIES = 200;
 const MAX_RULE_LENGTH = 500;
+const MAX_CONTEXT_LENGTH = 2_000;
 
 function clean(value: unknown): string {
   return typeof value === 'string'
@@ -76,6 +97,27 @@ function dedupe<T>(items: T[], key: (item: T) => string): T[] {
   return result;
 }
 
+function normalizeCleanup(value: unknown): CleanupRules {
+  const candidate =
+    value && typeof value === 'object'
+      ? (value as Partial<CleanupRules>)
+      : ({} as Partial<CleanupRules>);
+  const flag = (key: keyof CleanupRules): boolean =>
+    typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULT_CLEANUP[key];
+
+  return {
+    spokenPunctuation: flag('spokenPunctuation'),
+    fillers: flag('fillers'),
+    commonFixes: flag('commonFixes'),
+  };
+}
+
+function normalizeContext(value: unknown): string {
+  return typeof value === 'string'
+    ? value.replace(/\r\n/g, '\n').trim().slice(0, MAX_CONTEXT_LENGTH)
+    : '';
+}
+
 export function normalizeTextRules(value: unknown): TextRules {
   const candidate =
     value && typeof value === 'object'
@@ -101,7 +143,13 @@ export function normalizeTextRules(value: unknown): TextRules {
       ).slice(0, MAX_RULE_ENTRIES)
     : [];
 
-  return { style, dictionary, snippets };
+  return {
+    style,
+    dictionary,
+    snippets,
+    context: normalizeContext(candidate.context),
+    cleanup: normalizeCleanup(candidate.cleanup),
+  };
 }
 
 /** Parse `from = to` lines, also accepting `->`. Blank lines and # comments are ignored. */
@@ -211,6 +259,110 @@ export function applyStyle(text: string, style: TextStyle): string {
   }
 }
 
+const SPOKEN_PUNCTUATION: Array<{ find: string; replace: string }> = [
+  { find: 'new paragraph', replace: '\n\n' },
+  { find: 'new line', replace: '\n' },
+  { find: 'full stop', replace: '.' },
+  { find: 'question mark', replace: '?' },
+  { find: 'exclamation mark', replace: '!' },
+  { find: 'exclamation point', replace: '!' },
+  { find: 'open parenthesis', replace: '(' },
+  { find: 'close parenthesis', replace: ')' },
+  { find: 'semicolon', replace: ';' },
+  { find: 'ellipsis', replace: '…' },
+  { find: 'period', replace: '.' },
+  { find: 'comma', replace: ',' },
+  { find: 'colon', replace: ':' },
+];
+
+const FILLER_PATTERN =
+  /(?<![\p{L}\p{N}])(?:u+m+|u+h+m*|e+r+m?|a+h+|hm+|m{2,})(?![\p{L}\p{N}])\s*,?\s*/giu;
+
+const COMMON_FIXES: Array<{ find: string; replace: string }> = [
+  { find: 'alot', replace: 'a lot' },
+  { find: 'teh', replace: 'the' },
+  { find: 'recieve', replace: 'receive' },
+  { find: 'seperate', replace: 'separate' },
+  { find: 'definately', replace: 'definitely' },
+  { find: 'occured', replace: 'occurred' },
+  { find: 'dont', replace: "don't" },
+  { find: 'cant', replace: "can't" },
+  { find: 'wont', replace: "won't" },
+  { find: 'isnt', replace: "isn't" },
+  { find: 'arent', replace: "aren't" },
+  { find: 'wasnt', replace: "wasn't" },
+  { find: 'werent', replace: "weren't" },
+  { find: 'didnt', replace: "didn't" },
+  { find: 'doesnt', replace: "doesn't" },
+  { find: 'couldnt', replace: "couldn't" },
+  { find: 'wouldnt', replace: "wouldn't" },
+  { find: 'shouldnt', replace: "shouldn't" },
+  { find: 'hasnt', replace: "hasn't" },
+  { find: 'havent', replace: "haven't" },
+  { find: 'hadnt', replace: "hadn't" },
+  { find: 'im', replace: "I'm" },
+  { find: 'ive', replace: "I've" },
+  { find: 'youre', replace: "you're" },
+  { find: 'theyre', replace: "they're" },
+  { find: 'weve', replace: "we've" },
+  { find: 'thats', replace: "that's" },
+  { find: 'whats', replace: "what's" },
+  { find: 'i', replace: 'I' },
+];
+
+function applyCommonFixes(text: string): string {
+  const lookup = new Map(
+    COMMON_FIXES.map((pair) => [pair.find.toLocaleLowerCase(), pair.replace]),
+  );
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{N}])(?:${COMMON_FIXES.map((pair) =>
+      escapeRegExp(pair.find),
+    ).join('|')})(?![\\p{L}\\p{N}])`,
+    'giu',
+  );
+
+  return text.replace(pattern, (match: string) => {
+    const replacement = lookup.get(match.toLocaleLowerCase());
+    if (!replacement) {
+      return match;
+    }
+    const initial = match.charAt(0);
+    const capitalised =
+      initial === initial.toLocaleUpperCase() &&
+      initial !== initial.toLocaleLowerCase();
+    return capitalised
+      ? `${replacement.charAt(0).toLocaleUpperCase()}${replacement.slice(1)}`
+      : replacement;
+  });
+}
+
+/** Undo the tics of raw speech: spoken punctuation, fillers, and safe spelling fixes. */
+export function applyCleanup(text: string, cleanup: CleanupRules): string {
+  let next = text;
+
+  if (cleanup.spokenPunctuation) {
+    next = replacePhrases(next, SPOKEN_PUNCTUATION);
+    next = next
+      .replace(/[ \t]+([,.;:!?…])/g, '$1')
+      .replace(/[ \t]*\n[ \t]*/g, '\n')
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
+  if (cleanup.fillers) {
+    next = next.replace(FILLER_PATTERN, '');
+    next = next
+      .replace(/[ \t]+([,.;:!?…])/g, '$1')
+      .replace(/^[\s,;:]+/, '')
+      .replace(/([,;:])\s*\1+/g, '$1');
+  }
+
+  if (cleanup.commonFixes) {
+    next = applyCommonFixes(next);
+  }
+
+  return next;
+}
+
 function tidy(text: string): string {
   return text.replace(/[ \t]{2,}/g, ' ').trim();
 }
@@ -226,7 +378,8 @@ export function applyTextRules(
   rules: TextRules,
   options: ApplyRuleOptions = {},
 ): string {
-  let next = applyDictionary(text, rules.dictionary);
+  let next = applyCleanup(text, rules.cleanup ?? DEFAULT_CLEANUP);
+  next = applyDictionary(next, rules.dictionary);
   if (options.snippets !== false) {
     next = applySnippets(next, rules.snippets);
   }
@@ -241,10 +394,27 @@ export function keywordList(rules: TextRules): string[] {
   const words = [
     ...rules.dictionary.flatMap((entry) => [entry.from, entry.to]),
     ...rules.snippets.map((entry) => entry.trigger),
+    ...contextKeywords(rules.context ?? ''),
   ];
 
   return dedupe(
     words.map((word) => word.trim()).filter(Boolean),
     (word) => word,
   ).slice(0, MAX_RULE_ENTRIES);
+}
+
+/**
+ * Pull the words worth biasing from free-form context: names, acronyms, and
+ * anything else that is not ordinary lowercase prose.
+ */
+function contextKeywords(context: string): string[] {
+  const tokens = context.match(/[\p{L}\p{N}][\p{L}\p{N}'’._-]*/gu) ?? [];
+  return tokens
+    .map((token) => token.replace(/^[._'-]+|[._'-]+$/g, ''))
+    .filter(
+      (token) =>
+        token.length > 1 &&
+        /[\p{Lu}\p{N}]/u.test(token) &&
+        /[\p{L}]/u.test(token),
+    );
 }

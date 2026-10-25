@@ -13,6 +13,9 @@ const ENV_KEYS = [
   'CACTUS_CLI',
   'CACTUS_MODEL',
   'CACTUS_LANG',
+  'NEEDLE_CLI',
+  'NEEDLE_MODEL',
+  'TINYFISH_API_KEY',
   'FFMPEG_PATH',
   'FN_KEEP_AUDIO',
   'FN_INSERT_TOOL',
@@ -57,8 +60,43 @@ test('the default hold key is Right Alt', async () => {
     assert.equal(config.maxHoldMs, 120_000);
     assert.equal(config.cactusLanguage, 'auto');
     assert.ok(config.cactusModel.endsWith('whistle.cact'));
+    assert.equal(config.needleCli, config.cactusCli);
+    assert.ok(config.needleModel.endsWith('needle3.cact'));
+    assert.equal(config.tinyfishApiKey, '');
     assert.equal(config.insertTool, 'auto');
     assert.equal(config.keepAudio, false);
+  });
+});
+
+test('the Needle and TinyFish settings can be overridden', async () => {
+  await withTempDir(async (directory) => {
+    process.env.NEEDLE_CLI = '/tmp/needle3';
+    process.env.NEEDLE_MODEL = '/tmp/models/needle3.cact';
+    process.env.TINYFISH_API_KEY = 'tf_test_key';
+
+    try {
+      const config = loadConfig(directory, '/opt/fnfn');
+      assert.equal(config.needleCli, '/tmp/needle3');
+      assert.equal(config.needleModel, '/tmp/models/needle3.cact');
+      assert.equal(config.tinyfishApiKey, 'tf_test_key');
+    } finally {
+      delete process.env.NEEDLE_CLI;
+      delete process.env.NEEDLE_MODEL;
+      delete process.env.TINYFISH_API_KEY;
+    }
+  });
+});
+
+test('a saved TinyFish key is trimmed and the Space key is rejected', async () => {
+  await withTempDir(async (directory) => {
+    saveSettings(directory, {
+      tinyfishApiKey: '  tf_saved  ',
+      holdKeyCode: 57,
+    });
+
+    const config = loadConfig(directory, '/opt/fnfn');
+    assert.equal(config.tinyfishApiKey, 'tf_saved');
+    assert.equal(config.holdKeyCode, 100);
   });
 });
 

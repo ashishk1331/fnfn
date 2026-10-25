@@ -22,7 +22,7 @@
   },
   "main": ".vite/build/main.cjs",
   "scripts": {
-    "start": "electron-forge start -- --ozone-platform=x11",
+    "start": "tsx scripts/start.ts",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "release": "electron-forge release",

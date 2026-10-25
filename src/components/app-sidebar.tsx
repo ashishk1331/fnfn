@@ -1,4 +1,4 @@
-import { AudioLines, List, Settings2 } from 'lucide-react';
+import { AudioLines, Globe2, List, Settings2 } from 'lucide-react';
 
 import bareIcon from '../../assets/icons/bare-icon.svg';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ const destinations: Array<{
 }> = [
   { view: 'live', label: 'Live', icon: AudioLines },
   { view: 'events', label: 'Events', icon: List },
+  { view: 'search', label: 'Search', icon: Globe2 },
   { view: 'system', label: 'System', icon: Settings2 },
 ];
 

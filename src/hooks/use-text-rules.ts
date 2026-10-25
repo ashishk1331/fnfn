@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { describeError } from '@/lib/format';
 import {
+  DEFAULT_CLEANUP,
   DEFAULT_TEXT_RULES,
   formatRuleLines,
   normalizeTextRules,
   parseRuleLines,
+  type CleanupRules,
   type TextRules,
   type TextStyle,
 } from '@/shared/text-rules';
@@ -15,6 +17,8 @@ export interface TextRulesController {
   style: TextStyle;
   dictionaryText: string;
   snippetsText: string;
+  contextText: string;
+  cleanup: CleanupRules;
   saving: boolean;
   saved: boolean;
   dirty: boolean;
@@ -22,6 +26,8 @@ export interface TextRulesController {
   setStyle: (style: TextStyle) => void;
   setDictionaryText: (text: string) => void;
   setSnippetsText: (text: string) => void;
+  setContextText: (text: string) => void;
+  setCleanup: (key: keyof CleanupRules, value: boolean) => void;
   save: () => Promise<void>;
 }
 
@@ -39,6 +45,8 @@ export function useTextRules(): TextRulesController {
   const [style, setStyleState] = useState<TextStyle>(DEFAULT_TEXT_RULES.style);
   const [dictionaryText, setDictionaryTextState] = useState('');
   const [snippetsText, setSnippetsTextState] = useState('');
+  const [contextText, setContextTextState] = useState('');
+  const [cleanup, setCleanupState] = useState<CleanupRules>(DEFAULT_CLEANUP);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -62,6 +70,8 @@ export function useTextRules(): TextRulesController {
         setStyleState(normalized.style);
         setDictionaryTextState(formatRuleLines(normalized.dictionary));
         setSnippetsTextState(snippetsToLines(normalized));
+        setContextTextState(normalized.context ?? '');
+        setCleanupState(normalized.cleanup ?? DEFAULT_CLEANUP);
       })
       .catch((failure: unknown) => {
         if (active) {
@@ -106,6 +116,22 @@ export function useTextRules(): TextRulesController {
     [markDirty],
   );
 
+  const setContextText = useCallback(
+    (text: string) => {
+      setContextTextState(text);
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const setCleanup = useCallback(
+    (key: keyof CleanupRules, value: boolean) => {
+      setCleanupState((current) => ({ ...current, [key]: value }));
+      markDirty();
+    },
+    [markDirty],
+  );
+
   const save = useCallback(async () => {
     if (typeof window.fnfn?.setTextRules !== 'function') {
       setError('The preload bridge is missing.');
@@ -119,6 +145,8 @@ export function useTextRules(): TextRulesController {
         trigger: entry.from,
         expansion: entry.to,
       })),
+      context: contextText,
+      cleanup,
     });
 
     setSaving(true);
@@ -130,6 +158,8 @@ export function useTextRules(): TextRulesController {
       setStyleState(stored.style);
       setDictionaryTextState(formatRuleLines(stored.dictionary));
       setSnippetsTextState(snippetsToLines(stored));
+      setContextTextState(stored.context ?? '');
+      setCleanupState(stored.cleanup ?? DEFAULT_CLEANUP);
       setDirty(false);
       setSaved(true);
       if (savedTimer.current) {
@@ -141,13 +171,15 @@ export function useTextRules(): TextRulesController {
     } finally {
       setSaving(false);
     }
-  }, [dictionaryText, snippetsText, style]);
+  }, [cleanup, contextText, dictionaryText, snippetsText, style]);
 
   return {
     rules,
     style,
     dictionaryText,
     snippetsText,
+    contextText,
+    cleanup,
     saving,
     saved,
     dirty,
@@ -155,6 +187,8 @@ export function useTextRules(): TextRulesController {
     setStyle,
     setDictionaryText,
     setSnippetsText,
+    setContextText,
+    setCleanup,
     save,
   };
 }

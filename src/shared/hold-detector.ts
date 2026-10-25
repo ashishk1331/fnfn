@@ -14,6 +14,9 @@ export interface KeyRef {
 
 type HoldPhase = 'idle' | 'pending' | 'active';
 
+/** What the completed hold should do. */
+export type HoldMode = 'dictate' | 'search';
+
 export type HoldReason = 'release' | 'max-duration';
 
 export type CancelReason = 'other-key' | 'manual';
@@ -25,11 +28,18 @@ export type HoldUpdate =
       key: KeyRef;
     }
   | {
+      type: 'mode';
+      at: number;
+      key: KeyRef;
+      mode: 'search';
+    }
+  | {
       type: 'start';
       at: number;
       key: KeyRef;
       pressedAt: number;
       heldMs: number;
+      mode: HoldMode;
     }
   | {
       type: 'end';
@@ -40,6 +50,7 @@ export type HoldUpdate =
       /** True when the hold reached the threshold and should be transcribed. */
       qualified: boolean;
       reason: HoldReason;
+      mode: HoldMode;
     }
   | {
       type: 'cancel';
@@ -54,22 +65,30 @@ export interface HoldDetectorOptions {
   thresholdMs?: number;
   /** Safety stop so a stuck key cannot record forever. */
   maxHoldMs?: number;
+  /** How long the chord key must overlap the hold key to switch modes. */
+  chordThresholdMs?: number;
 }
 
 const DEFAULT_THRESHOLD_MS = 250;
 const DEFAULT_MAX_HOLD_MS = 120_000;
+const DEFAULT_CHORD_THRESHOLD_MS = 250;
 
 export class HoldDetector {
   readonly thresholdMs: number;
   readonly maxHoldMs: number;
+  readonly chordThresholdMs: number;
 
   private phase: HoldPhase = 'idle';
   private key: KeyRef | null = null;
   private pressedAt = 0;
+  private mode: HoldMode = 'dictate';
+  private chordHeld = false;
+  private chordPressedAt: number | null = null;
 
   constructor(options: HoldDetectorOptions = {}) {
     const threshold = options.thresholdMs ?? DEFAULT_THRESHOLD_MS;
     const max = options.maxHoldMs ?? DEFAULT_MAX_HOLD_MS;
+    const chord = options.chordThresholdMs ?? DEFAULT_CHORD_THRESHOLD_MS;
 
     if (!Number.isFinite(threshold) || threshold < 0) {
       throw new Error('thresholdMs must be a finite number >= 0');
@@ -79,9 +98,18 @@ export class HoldDetector {
         'maxHoldMs must be a finite number greater than thresholdMs',
       );
     }
+    if (!Number.isFinite(chord) || chord < 0) {
+      throw new Error('chordThresholdMs must be a finite number >= 0');
+    }
 
     this.thresholdMs = threshold;
     this.maxHoldMs = max;
+    this.chordThresholdMs = chord;
+  }
+
+  /** The mode the current hold will use; `search` once the chord commits. */
+  get holdMode(): HoldMode {
+    return this.mode;
   }
 
   get isIdle(): boolean {
@@ -100,8 +128,56 @@ export class HoldDetector {
     this.phase = 'pending';
     this.key = key;
     this.pressedAt = at;
+    this.mode = 'dictate';
+    // The chord key may already be down; require a full overlap from here.
+    if (this.chordHeld) {
+      this.chordPressedAt = at;
+    }
 
     return [{ type: 'pending', at, key }];
+  }
+
+  /**
+   * The chord key (Space) went down. It never starts a hold on its own; it only
+   * arms the search mode while the talk key is also down.
+   */
+  pressChord(at: number): HoldUpdate[] {
+    this.chordHeld = true;
+
+    if (this.phase === 'idle' || this.mode === 'search') {
+      return [];
+    }
+
+    if (this.chordPressedAt === null) {
+      this.chordPressedAt = at;
+    }
+
+    return [];
+  }
+
+  /**
+   * The chord key came back up. Releasing it before the chord matures leaves
+   * the dictation untouched; releasing it afterwards ends the search hold.
+   */
+  releaseChord(at: number): HoldUpdate[] {
+    this.chordHeld = false;
+
+    if (this.phase === 'idle') {
+      this.chordPressedAt = null;
+      return [];
+    }
+
+    if (this.mode !== 'search') {
+      const updates = this.settleChord(at);
+      if (this.holdMode === 'search') {
+        return [...updates, ...this.finish(at, 'release', true)];
+      }
+
+      this.chordPressedAt = null;
+      return updates;
+    }
+
+    return this.finish(at, 'release', true);
   }
 
   /** Call on a short interval while a press is pending or active. */
@@ -110,26 +186,24 @@ export class HoldDetector {
       return [];
     }
 
+    const updates = this.settleChord(at);
     const heldMs = at - this.pressedAt;
 
     if (this.phase === 'pending' && heldMs >= this.thresholdMs) {
       this.phase = 'active';
-      return [
-        {
-          type: 'start',
-          at,
-          key: this.key,
-          pressedAt: this.pressedAt,
-          heldMs,
-        },
-      ];
+      updates.push({
+        type: 'start',
+        at,
+        key: this.key,
+        pressedAt: this.pressedAt,
+        heldMs,
+        mode: this.mode,
+      });
+    } else if (this.phase === 'active' && heldMs >= this.maxHoldMs) {
+      updates.push(...this.finish(at, 'max-duration', true));
     }
 
-    if (this.phase === 'active' && heldMs >= this.maxHoldMs) {
-      return this.finish(at, 'max-duration', true);
-    }
-
-    return [];
+    return updates;
   }
 
   /**
@@ -142,8 +216,8 @@ export class HoldDetector {
       return [];
     }
 
+    const updates = this.settleChord(at);
     const heldMs = at - this.pressedAt;
-    const updates: HoldUpdate[] = [];
 
     if (this.phase === 'pending' && heldMs >= this.thresholdMs) {
       this.phase = 'active';
@@ -153,6 +227,7 @@ export class HoldDetector {
         key: this.key,
         pressedAt: this.pressedAt,
         heldMs: this.thresholdMs,
+        mode: this.mode,
       });
     }
 
@@ -173,6 +248,37 @@ export class HoldDetector {
     return [{ type: 'cancel', at, key, heldMs, reason }];
   }
 
+  private settleChord(at: number): HoldUpdate[] {
+    if (
+      !this.key ||
+      this.mode === 'search' ||
+      this.chordPressedAt === null ||
+      at - this.chordPressedAt < this.chordThresholdMs
+    ) {
+      return [];
+    }
+
+    this.mode = 'search';
+
+    // A chord that matures before the normal hold threshold starts capture
+    // immediately so the search recording is not delayed.
+    if (this.phase === 'pending') {
+      this.phase = 'active';
+      return [
+        {
+          type: 'start',
+          at,
+          key: this.key,
+          pressedAt: this.pressedAt,
+          heldMs: Math.max(0, at - this.pressedAt),
+          mode: 'search',
+        },
+      ];
+    }
+
+    return [{ type: 'mode', at, key: this.key, mode: 'search' }];
+  }
+
   private finish(
     at: number,
     reason: HoldReason,
@@ -185,6 +291,7 @@ export class HoldDetector {
     const key = this.key;
     const pressedAt = this.pressedAt;
     const heldMs = Math.max(0, at - pressedAt);
+    const mode = this.mode;
     this.reset();
 
     return [
@@ -196,6 +303,7 @@ export class HoldDetector {
         heldMs,
         qualified,
         reason,
+        mode,
       },
     ];
   }
@@ -204,5 +312,8 @@ export class HoldDetector {
     this.phase = 'idle';
     this.key = null;
     this.pressedAt = 0;
+    this.mode = 'dictate';
+    this.chordHeld = false;
+    this.chordPressedAt = null;
   }
 }

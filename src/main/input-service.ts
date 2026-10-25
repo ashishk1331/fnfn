@@ -13,6 +13,7 @@ interface InputServiceOptions {
 
 const LEARN_TIMEOUT_MS = 8_000;
 const TICK_MS = 10;
+const KEY_SPACE = 57;
 
 type StatusListener = (status: InputStatus) => void;
 type UpdateListener = (update: HoldUpdate) => void;
@@ -192,6 +193,13 @@ export class InputService {
   }
 
   setHoldKey(key: KeyRef): InputStatus {
+    if (key.code === KEY_SPACE) {
+      this.message =
+        'Space is reserved for the search chord. Hold your talk key plus Space to search.';
+      this.emitStatus();
+      return this.status;
+    }
+
     this.simulatedHeld = false;
     this.emitUpdates(this.detector.cancel(Date.now(), 'manual'));
     this.stopTicker();
@@ -243,6 +251,13 @@ export class InputService {
         return;
       }
 
+      if (event.code === KEY_SPACE) {
+        this.message =
+          'Space is reserved for the search chord. Press a different key.';
+        this.emitStatus();
+        return;
+      }
+
       const key: KeyRef = {
         code: event.code,
         name: keyName(event.code),
@@ -266,6 +281,19 @@ export class InputService {
 
     // value 2 is an autorepeat, not a new press.
     if (event.value === 2) {
+      return;
+    }
+
+    // Space only matters as half of the search chord. It must never cancel a
+    // dictation, otherwise Alt+Space would discard the hold before it starts.
+    if (event.code === KEY_SPACE) {
+      if (event.value === 1) {
+        this.detector.pressChord(event.at);
+      } else {
+        const updates = this.detector.releaseChord(event.at);
+        this.emitUpdates(updates);
+        this.stopTickerIfIdle();
+      }
       return;
     }
 

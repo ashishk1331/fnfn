@@ -12,7 +12,11 @@ import {
 } from '../shared/text-rules';
 import type { AppConfig } from './config';
 import { analyzeVoiceActivity, isHallucinationCandidate } from './vad';
-import type { SttInfo, TranscriptionResult } from '../shared/types';
+import type {
+  SttInfo,
+  TranscriptionMode,
+  TranscriptionResult,
+} from '../shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -592,6 +596,7 @@ export class SttService {
   async transcribe(
     audio: ArrayBuffer,
     durationMs: number,
+    mode: TranscriptionMode = 'dictate',
   ): Promise<TranscriptionResult> {
     if (audio.byteLength === 0) {
       throw new Error('The recorder sent an empty buffer.');
@@ -672,7 +677,11 @@ export class SttService {
       }
 
       return {
-        text: applyTextRules(cleaned, rules),
+        text: applyTextRules(
+          cleaned,
+          rules,
+          mode === 'search' ? { snippets: false, style: false } : {},
+        ),
         timings: {
           convertMs: convertedAt - startedAt,
           sttMs: finishedAt - convertedAt,

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { AppSidebar } from '@/components/app-sidebar';
 import { EventsView } from '@/components/events-view';
 import { LiveView } from '@/components/live-view';
+import { SearchView } from '@/components/search-view';
 import { SystemView } from '@/components/system-view';
 import { usePushToTalk } from '@/hooks/use-push-to-talk';
 import { useTextRules } from '@/hooks/use-text-rules';
@@ -92,12 +93,15 @@ export default function App() {
               progress={ptt.progress}
               note={ptt.note}
               transcript={ptt.transcript}
+              search={ptt.search}
               onSimulateDown={ptt.simulateDown}
               onSimulateUp={ptt.simulateUp}
             />
           )}
 
           {view === 'events' && <EventsView />}
+
+          {view === 'search' && <SearchView />}
 
           {view === 'system' && (
             <SystemView

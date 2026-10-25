@@ -179,3 +179,133 @@ test('a zero threshold starts on the first tick', () => {
 
   assert.equal(start.heldMs, 0);
 });
+
+test('space alone never starts or ends a hold', () => {
+  const detector = new HoldDetector({
+    thresholdMs: 100,
+    maxHoldMs: 1_000,
+    chordThresholdMs: 50,
+  });
+
+  assert.deepEqual(detector.pressChord(0), []);
+  assert.equal(detector.isIdle, true);
+  assert.deepEqual(detector.tick(200), []);
+  assert.deepEqual(detector.releaseChord(300), []);
+});
+
+test('holding space with the talk key switches an active hold to search', () => {
+  const detector = new HoldDetector({
+    thresholdMs: 100,
+    maxHoldMs: 1_000,
+    chordThresholdMs: 50,
+  });
+
+  detector.press(key, 0);
+  const [start] = detector.tick(100);
+  assert.equal(start?.type, 'start');
+  if (start?.type !== 'start') {
+    return;
+  }
+  assert.equal(start.mode, 'dictate');
+
+  assert.deepEqual(detector.pressChord(120), []);
+  assert.deepEqual(detector.tick(169), []);
+
+  const [mode] = detector.tick(170);
+  assert.deepEqual(mode, {
+    type: 'mode',
+    at: 170,
+    key,
+    mode: 'search',
+  });
+  assert.equal(detector.holdMode, 'search');
+
+  const [end] = detector.release(500);
+  assert.equal(end?.type, 'end');
+  if (end?.type !== 'end') {
+    return;
+  }
+  assert.equal(end.mode, 'search');
+  assert.equal(end.qualified, true);
+  assert.equal(detector.holdMode, 'dictate');
+});
+
+test('releasing space before the chord matures leaves dictation alone', () => {
+  const detector = new HoldDetector({
+    thresholdMs: 100,
+    maxHoldMs: 1_000,
+    chordThresholdMs: 50,
+  });
+
+  detector.press(key, 0);
+  detector.tick(100);
+  detector.pressChord(120);
+
+  assert.deepEqual(detector.releaseChord(160), []);
+
+  const [end] = detector.release(500);
+  assert.equal(end?.type, 'end');
+  if (end?.type !== 'end') {
+    return;
+  }
+  assert.equal(end.mode, 'dictate');
+});
+
+test('space held before the talk key still forms a chord', () => {
+  const detector = new HoldDetector({
+    thresholdMs: 100,
+    maxHoldMs: 1_000,
+    chordThresholdMs: 50,
+  });
+
+  assert.deepEqual(detector.pressChord(0), []);
+  assert.deepEqual(detector.press(key, 10), [{ type: 'pending', at: 10, key }]);
+  assert.deepEqual(detector.tick(59), []);
+
+  // The chord starts capture immediately, before the normal hold threshold.
+  const [start] = detector.tick(60);
+  assert.equal(start?.type, 'start');
+  if (start?.type !== 'start') {
+    return;
+  }
+  assert.equal(start.mode, 'search');
+  assert.equal(start.heldMs, 50);
+
+  const [end] = detector.releaseChord(300);
+  assert.equal(end?.type, 'end');
+  if (end?.type !== 'end') {
+    return;
+  }
+  assert.equal(end.mode, 'search');
+  assert.equal(end.qualified, true);
+  assert.equal(detector.isIdle, true);
+});
+
+test('releasing space after the chord ends the search hold', () => {
+  const detector = new HoldDetector({
+    thresholdMs: 50,
+    maxHoldMs: 1_000,
+    chordThresholdMs: 50,
+  });
+
+  detector.press(key, 0);
+  detector.pressChord(0);
+  detector.tick(50);
+  assert.equal(detector.holdMode, 'search');
+
+  const [end] = detector.releaseChord(300);
+  assert.equal(end?.type, 'end');
+  if (end?.type !== 'end') {
+    return;
+  }
+  assert.equal(end.reason, 'release');
+  assert.equal(end.mode, 'search');
+  assert.equal(detector.isIdle, true);
+});
+
+test('the constructor rejects a negative chord threshold', () => {
+  assert.throws(
+    () => new HoldDetector({ chordThresholdMs: -1 }),
+    /chordThresholdMs must be a finite number/,
+  );
+});

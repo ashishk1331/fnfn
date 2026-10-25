@@ -1,13 +1,19 @@
-import type { ComponentProps, ReactNode } from 'react';
+import {
+  useEffect,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
 import { Keyboard, LoaderCircle, Mic, TriangleAlert } from 'lucide-react';
 
 import { NoteLine } from '@/components/note-line';
+import { describeError } from '@/lib/format';
 import type { Note } from '@/hooks/use-push-to-talk';
 import type { TextRulesController } from '@/hooks/use-text-rules';
 import { cn } from '@/lib/utils';
 import { keyLabel } from '@/shared/keycodes';
-import type { TextStyle } from '@/shared/text-rules';
-import type { InputStatus, SttInfo } from '@/shared/types';
+import type { CleanupRules, TextStyle } from '@/shared/text-rules';
+import type { AgentSettings, InputStatus, SttInfo } from '@/shared/types';
 
 interface SystemViewProps {
   status: InputStatus | null;
@@ -147,6 +153,212 @@ function RuleTextarea({
         className="mt-2 w-full resize-y rounded-lg border border-line bg-panel px-3 py-2 font-mono text-[11px] leading-relaxed text-ink outline-none transition-colors duration-200 ease-out placeholder:text-faint focus-visible:border-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       />
     </label>
+  );
+}
+
+const CLEANUP_OPTIONS: Array<{
+  key: keyof CleanupRules;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: 'spokenPunctuation',
+    label: 'Spoken punctuation',
+    hint: 'say comma, full stop, new line',
+  },
+  { key: 'fillers', label: 'Drop fillers', hint: 'um, uh, hmm' },
+  {
+    key: 'commonFixes',
+    label: 'Common fixes',
+    hint: 'dont, alot, lowercase i',
+  },
+];
+
+function CleanupFieldset({
+  cleanup,
+  onChange,
+}: {
+  cleanup: CleanupRules;
+  onChange: (key: keyof CleanupRules, value: boolean) => void;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="text-[9px] font-medium tracking-[0.13em] text-faint uppercase">
+        Cleanup
+      </legend>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {CLEANUP_OPTIONS.map(({ key, label, hint }) => (
+          <label
+            key={key}
+            className="flex items-start gap-2 rounded-lg border border-line bg-panel px-3 py-2"
+          >
+            <input
+              type="checkbox"
+              checked={cleanup[key]}
+              onChange={(event) => onChange(key, event.target.checked)}
+              className="mt-0.5 size-3.5 shrink-0 accent-accent"
+            />
+            <span className="min-w-0">
+              <span className="block text-[10px] text-ink">{label}</span>
+              <span className="block text-[9px] leading-relaxed text-faint">
+                {hint}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function AgentPanel() {
+  const [settings, setSettings] = useState<AgentSettings | null>(null);
+  const [key, setKey] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window.fnfn?.getAgentSettings !== 'function') {
+      return;
+    }
+
+    let active = true;
+    void window.fnfn
+      .getAgentSettings()
+      .then((next) => {
+        if (active) {
+          setSettings(next);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (active) {
+          setError(describeError(failure));
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!saved) {
+      return;
+    }
+    const timer = setTimeout(() => setSaved(false), 2500);
+    return () => clearTimeout(timer);
+  }, [saved]);
+
+  const saveKey = async (): Promise<void> => {
+    if (typeof window.fnfn?.setTinyfishKey !== 'function') {
+      setError('The preload bridge is missing.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const next = await window.fnfn.setTinyfishKey(key);
+      setSettings(next);
+      setKey('');
+      setSaved(true);
+    } catch (failure) {
+      setError(describeError(failure));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-line bg-panel-2">
+      <div className="border-b border-line/80 px-4 py-3">
+        <h2 className="text-[10px] font-medium tracking-[0.13em] text-faint uppercase">
+          Web answers
+        </h2>
+        <p className="mt-1 text-[10px] leading-relaxed text-faint">
+          Hold the talk key, add Space, and ask a question out loud.
+        </p>
+      </div>
+
+      <dl>
+        <Row
+          label="Needle"
+          value={
+            settings
+              ? settings.needleReady
+                ? 'Ready'
+                : 'Model missing'
+              : 'Checking…'
+          }
+          tone={settings && !settings.needleReady ? 'warn' : 'default'}
+        />
+        <Row label="Model" value={settings?.needleModel ?? '—'} mono />
+        <Row
+          label="TinyFish"
+          value={
+            settings
+              ? settings.tinyfishConfigured
+                ? settings.tinyfishFromEnv
+                  ? 'From environment'
+                  : 'Key saved'
+                : 'Key needed'
+              : 'Checking…'
+          }
+          tone={settings && !settings.tinyfishConfigured ? 'warn' : 'default'}
+        />
+      </dl>
+
+      {settings && !settings.tinyfishFromEnv && (
+        <div className="border-t border-line/80 px-4 py-3">
+          <label className="block">
+            <span className="text-[9px] font-medium tracking-[0.13em] text-faint uppercase">
+              TinyFish API key
+            </span>
+            <span className="mt-1 block text-[10px] leading-relaxed text-faint">
+              {settings.tinyfishHint}
+            </span>
+            <div className="mt-2 flex gap-2">
+              <input
+                type="password"
+                value={key}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={
+                  settings.tinyfishConfigured
+                    ? 'Enter a new key to replace'
+                    : 'Paste your key'
+                }
+                onChange={(event) => setKey(event.target.value)}
+                className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-panel px-3 font-mono text-[11px] text-ink outline-none transition-colors duration-200 ease-out placeholder:text-faint focus-visible:border-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              />
+              <ActionButton
+                onClick={() => void saveKey()}
+                disabled={saving || !key.trim()}
+              >
+                {saving ? 'Saving…' : 'Save key'}
+              </ActionButton>
+            </div>
+          </label>
+        </div>
+      )}
+
+      {(saved || error) && (
+        <div className="flex items-center gap-3 border-t border-line/80 px-4 py-3">
+          {saved && (
+            <span role="status" className="text-[10px] text-accent">
+              Key saved
+            </span>
+          )}
+          {error && (
+            <span role="alert" className="min-w-0 text-[10px] text-danger">
+              {error}
+            </span>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -293,6 +505,14 @@ export function SystemView({
             placeholder="my email = me@example.com"
             onChange={text.setSnippetsText}
           />
+          <RuleTextarea
+            label="Context"
+            hint="Names, products, and places the engine should favour. Capitalised words become decoder keywords."
+            value={text.contextText}
+            placeholder="Working on Cactus, Needle and TinyFish with Ashish."
+            onChange={text.setContextText}
+          />
+          <CleanupFieldset cleanup={text.cleanup} onChange={text.setCleanup} />
         </div>
 
         <div className="flex items-center gap-3 border-t border-line/80 px-4 py-3">
@@ -317,6 +537,8 @@ export function SystemView({
           </span>
         </div>
       </section>
+
+      <AgentPanel />
 
       {note && <NoteLine note={note} />}
     </div>

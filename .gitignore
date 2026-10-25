@@ -50,6 +50,9 @@ web_modules/
 # Local Whistle engine and weights (scripts/fetch-needle.sh)
 vendor/needle/
 
+# Local agent/tooling workspace state
+.qoder/
+
 # Leftover venv from the removed Python bridge; safe to delete
 .venv-cactus/
 

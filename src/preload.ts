@@ -2,13 +2,17 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 import type { HoldUpdate } from './shared/hold-detector';
 import type {
+  AgentSettings,
   FnfnApi,
   HistoryEntry,
   InputStatus,
   InsertResult,
   LearnEvent,
   OverlayState,
+  SearchEntry,
+  SearchProgress,
   SttInfo,
+  TranscriptionMode,
   TranscriptionResult,
 } from './shared/types';
 import type { TextRules } from './shared/text-rules';
@@ -41,8 +45,9 @@ const api: FnfnApi = {
   transcribe: (
     audio: ArrayBuffer,
     durationMs: number,
+    mode: TranscriptionMode = 'dictate',
   ): Promise<TranscriptionResult> =>
-    ipcRenderer.invoke('stt:transcribe', audio, durationMs),
+    ipcRenderer.invoke('stt:transcribe', audio, durationMs, mode),
   startPreview: (): void => {
     ipcRenderer.send('stt:preview-start');
   },
@@ -54,6 +59,21 @@ const api: FnfnApi = {
   },
   onPartial: (callback: (text: string) => void): (() => void) =>
     subscribe('stt:partial', callback),
+  runSearch: (text: string): Promise<SearchEntry> =>
+    ipcRenderer.invoke('search:run', text),
+  onSearchProgress: (
+    callback: (progress: SearchProgress) => void,
+  ): (() => void) => subscribe('search:progress', callback),
+  getSearches: (): Promise<SearchEntry[]> => ipcRenderer.invoke('search:list'),
+  clearSearches: (): Promise<void> => ipcRenderer.invoke('search:clear'),
+  onSearchChanged: (callback: () => void): (() => void) =>
+    subscribe('search:changed', callback),
+  getAgentSettings: (): Promise<AgentSettings> =>
+    ipcRenderer.invoke('agent:settings'),
+  setTinyfishKey: (key: string): Promise<AgentSettings> =>
+    ipcRenderer.invoke('agent:set-tinyfish', key),
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke('app:open-external', url),
   getTextRules: (): Promise<TextRules> => ipcRenderer.invoke('rules:get'),
   setTextRules: (rules: TextRules): Promise<TextRules> =>
     ipcRenderer.invoke('rules:set', rules),

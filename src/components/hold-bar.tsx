@@ -8,6 +8,10 @@ const actionLabel: Record<Phase, string> = {
   pending: 'Keep holding',
   recording: 'Listening',
   transcribing: 'Transcribing',
+  searching: 'Searching the web',
+  reading: 'Reading the top pages',
+  answering: 'Answering',
+  done: 'Answer ready',
   error: 'Try again',
 };
 
@@ -16,6 +20,10 @@ const spokenLabel: Record<Phase, string> = {
   pending: 'Keep holding to start',
   recording: 'Listening, release to transcribe',
   transcribing: 'Transcribing',
+  searching: 'Searching the web',
+  reading: 'Reading the top pages',
+  answering: 'Answering',
+  done: 'Answer ready, hold to talk again',
   error: 'That take failed, try again',
 };
 
@@ -36,14 +44,13 @@ export function HoldBar({
 }: HoldBarProps) {
   const clamped = Math.max(0, Math.min(1, progress));
   const active = phase === 'pending' || phase === 'recording';
-  const busy = phase === 'transcribing';
+  const busy =
+    phase === 'transcribing' ||
+    phase === 'searching' ||
+    phase === 'reading' ||
+    phase === 'answering';
   const failed = phase === 'error';
-  const keycap =
-    phase === 'recording'
-      ? 'Release'
-      : phase === 'transcribing'
-        ? 'Wait'
-        : keyName;
+  const keycap = phase === 'recording' ? 'Release' : busy ? 'Wait' : keyName;
   const Icon = busy ? LoaderCircle : failed ? TriangleAlert : Mic;
 
   return (

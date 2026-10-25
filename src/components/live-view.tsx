@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, LoaderCircle, Mic, TriangleAlert } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Globe2,
+  LoaderCircle,
+  Mic,
+  TriangleAlert,
+} from 'lucide-react';
 
 import { HoldBar } from '@/components/hold-bar';
 import { NoteLine } from '@/components/note-line';
 import type { Note, Phase, TranscriptView } from '@/hooks/use-push-to-talk';
 import { cn } from '@/lib/utils';
 import { keyLabel } from '@/shared/keycodes';
-import type { InputStatus } from '@/shared/types';
+import type { InputStatus, SearchEntry } from '@/shared/types';
 
 interface LiveViewProps {
   status: InputStatus | null;
@@ -15,6 +22,7 @@ interface LiveViewProps {
   progress: number;
   note: Note | null;
   transcript: TranscriptView;
+  search: SearchEntry | null;
   onSimulateDown: () => void;
   onSimulateUp: () => void;
 }
@@ -85,7 +93,11 @@ function InputState({
 
 function EmptyState({ phase }: { phase: Phase }) {
   const active = phase === 'pending' || phase === 'recording';
-  const busy = phase === 'transcribing';
+  const busy =
+    phase === 'transcribing' ||
+    phase === 'searching' ||
+    phase === 'reading' ||
+    phase === 'answering';
   const failed = phase === 'error';
 
   return (
@@ -125,6 +137,7 @@ export function LiveView({
   progress,
   note,
   transcript,
+  search,
   onSimulateDown,
   onSimulateUp,
 }: LiveViewProps) {
@@ -224,7 +237,12 @@ export function LiveView({
         <div
           aria-live="polite"
           aria-atomic="true"
-          aria-busy={phase === 'transcribing'}
+          aria-busy={
+            phase === 'transcribing' ||
+            phase === 'searching' ||
+            phase === 'reading' ||
+            phase === 'answering'
+          }
           className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1"
         >
           {hasText ? (
@@ -244,6 +262,35 @@ export function LiveView({
 
       {note && <NoteLine note={note} />}
 
+      {search && phase === 'done' && (
+        <section
+          aria-label="Web answer"
+          className="mt-3 shrink-0 rounded-xl border border-line bg-panel-2 p-3.5"
+        >
+          <div className="flex items-center gap-1.5 text-[9px] font-medium tracking-[0.12em] text-dim uppercase">
+            <Globe2
+              className="size-3 text-accent"
+              strokeWidth={1.7}
+              aria-hidden="true"
+            />
+            <span>Web answer</span>
+            <a
+              href="#search"
+              className="ml-auto text-faint underline decoration-line-strong underline-offset-4 hover:text-ink"
+            >
+              All searches
+            </a>
+          </div>
+          <p className="mt-1.5 line-clamp-3 text-[13px] leading-[1.55] text-ink">
+            {search.answer}
+          </p>
+          <p className="mt-1 truncate text-[10px] text-faint">
+            {search.query}
+            {search.sources[0] ? ` · ${search.sources[0].site}` : ''}
+          </p>
+        </section>
+      )}
+
       <div className="mt-4 shrink-0">
         <HoldBar
           keyName={key}
@@ -252,6 +299,10 @@ export function LiveView({
           onDown={onSimulateDown}
           onUp={onSimulateUp}
         />
+        <p className="mt-2 text-center text-[10px] text-faint">
+          Hold <kbd className="font-sans text-dim">{key}</kbd> to dictate, add{' '}
+          <kbd className="font-sans text-dim">Space</kbd> for a web answer
+        </p>
       </div>
     </div>
   );
