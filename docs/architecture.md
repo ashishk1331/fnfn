@@ -55,6 +55,32 @@ key-down / key-up
 The key events travel one way only. The transcript comes back to the renderer
 as the reply to `stt:transcribe`, and the renderer then asks main to type it.
 
+## Live preview
+
+While the key is held, the same recorder streams chunks to main:
+
+```text
+[R] MediaRecorder --stt:preview-chunk (IPC)--> [M] SttService
+                                                     | every 1.4 s
+                                        ffmpeg -> VAD -> Whistle
+                                         (--audio-stream pass)
+                                                     |
+                                         stt:partial (IPC event)
+                                                     |
+                                                     v
+                                             [R] Live text
+```
+
+Each pass converts the accumulated WebM, drops silence, and runs the engine in
+streaming mode over the whole clip. Partial text replaces the previous preview;
+it is never inserted, added to history, or put on the clipboard. Releasing the
+key sends `stt:preview-stop`, which aborts the running pass and removes its temp
+directory, then `stt:transcribe` runs one final pass. The final reply replaces
+the preview and is the only text that gets typed.
+
+Preview passes apply the dictionary and style but skip snippets, so a
+half-spoken trigger cannot expand early.
+
 ## HUD side channel
 
 The floating HUD is not part of the transcript path. It is a one-way feed from
@@ -96,42 +122,50 @@ window with `showInactive()`, and hides it 700 ms after the phase goes idle.
 
 ## Why these choices
 
-| Choice                        | Reason                                                                                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Electron                      | One app can host a React UI, a separate always-on-top HUD window, microphone capture, and Node-side device and subprocess access.           |
-| Main process owns OS work     | evdev, ffmpeg, Whistle, typing tools, and settings all need Node; keeping them out of the renderer leaves it sandboxed and replaceable.     |
-| `contextIsolation` + preload  | The renderer gets a small typed `window.fnfn` API instead of `nodeIntegration`, so a compromised page cannot open devices or spawn tools.   |
-| Passive evdev, no `EVIOCGRAB` | Keys still reach the focused app, and it works on Wayland where compositors block global shortcuts. The only extra privilege is `input`.    |
-| Pure `HoldDetector`           | Threshold, autorepeat filtering, and cancel semantics are unit-tested without a keyboard, a microphone, or Electron.                        |
-| Capture starts on key-down    | Starting at the threshold would clip the first syllable; the detector decides later whether the press was a hold or a tap.                  |
-| `MediaRecorder` in renderer   | Chromium already encodes Opus/WebM; the main process receives one `ArrayBuffer` instead of owning another audio pipeline.                   |
-| ffmpeg conversion             | Whistle accepts many formats, but 16 kHz mono PCM is small and predictable, and ffmpeg decodes anything the recorder produces.              |
-| In-process VAD                | A cheap energy/band/zero-crossing gate drops silence and most hallucinations before paying for model startup.                               |
-| Whistle as a subprocess       | Prebuilt binary plus 17 MB weights, no Python, and a crash cannot take down the UI. The tradeoff is process start and weight load per hold. |
-| External typing tools         | fnfn does not ship a privileged input daemon; it drives `wtype`, `ydotool`, or `xdotool`, picked for the session.                           |
-| Separate HUD window           | `focusable: false`, click-through, and always-on-top keep focus and insertion in the target app while the waveform stays visible.           |
-| JSON settings and history     | Inspectable, dependency-free persistence. History is capped at 200 entries and stored as plain text.                                        |
-| XWayland relaunch             | GNOME ignores Wayland window coordinates, and Chromium fixes its ozone platform before app code runs, so the packaged app restarts once.    |
+| Choice                        | Reason                                                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Electron                      | One app can host a React UI, a separate always-on-top HUD window, microphone capture, and Node-side device and subprocess access.                       |
+| Main process owns OS work     | evdev, ffmpeg, Whistle, typing tools, and settings all need Node; keeping them out of the renderer leaves it sandboxed and replaceable.                 |
+| `contextIsolation` + preload  | The renderer gets a small typed `window.fnfn` API instead of `nodeIntegration`, so a compromised page cannot open devices or spawn tools.               |
+| Periodic preview passes       | Whistle cannot read a FIFO or a growing file, so each 1.4 s preview converts the clip so far and streams it. The final pass still starts clean.         |
+| Text rules in `shared/`       | Dictionary, snippet, and style logic is pure and unit-tested; main applies it to final text, and the same module builds engine keywords.                |
+| Tray with a close fallback    | Closing hides a working app instead of killing the global hook. If the desktop has no tray, closing quits so the window cannot vanish with no way back. |
+| Icons inside the asar         | Electron can read `assets/` from the asar for both the window and tray, so there is one copy in development and packaging.                              |
+| Passive evdev, no `EVIOCGRAB` | Keys still reach the focused app, and it works on Wayland where compositors block global shortcuts. The only extra privilege is `input`.                |
+| Pure `HoldDetector`           | Threshold, autorepeat filtering, and cancel semantics are unit-tested without a keyboard, a microphone, or Electron.                                    |
+| Capture starts on key-down    | Starting at the threshold would clip the first syllable; the detector decides later whether the press was a hold or a tap.                              |
+| `MediaRecorder` in renderer   | Chromium already encodes Opus/WebM; the main process receives one `ArrayBuffer` instead of owning another audio pipeline.                               |
+| ffmpeg conversion             | Whistle accepts many formats, but 16 kHz mono PCM is small and predictable, and ffmpeg decodes anything the recorder produces.                          |
+| In-process VAD                | A cheap energy/band/zero-crossing gate drops silence and most hallucinations before paying for model startup.                                           |
+| Whistle as a subprocess       | Prebuilt binary plus 17 MB weights, no Python, and a crash cannot take down the UI. The tradeoff is process start and weight load per hold.             |
+| External typing tools         | fnfn does not ship a privileged input daemon; it drives `wtype`, `ydotool`, or `xdotool`, picked for the session.                                       |
+| Separate HUD window           | `focusable: false`, click-through, and always-on-top keep focus and insertion in the target app while the waveform stays visible.                       |
+| JSON settings and history     | Inspectable, dependency-free persistence. History is capped at 200 entries and stored as plain text.                                                    |
+| XWayland relaunch             | GNOME ignores Wayland window coordinates, and Chromium fixes its ozone platform before app code runs, so the packaged app restarts once.                |
 
 ## Project map
 
-| Path                              | Responsibility                                           |
-| --------------------------------- | -------------------------------------------------------- |
-| `src/main.ts`                     | Lifecycle, IPC, clipboard, HUD window, XWayland relaunch |
-| `src/main/evdev.ts`               | Device enumeration and raw `input_event` decoding        |
-| `src/main/input-service.ts`       | Detector wiring, learn mode, simulator, status           |
-| `src/main/stt.ts`                 | ffmpeg conversion, VAD, and the Whistle engine           |
-| `src/main/vad.ts`                 | Speech-band voice activity detection                     |
-| `src/main/history.ts`             | Transcript store behind **Events**, capped at 200        |
-| `src/main/insert.ts`              | Focused-app typing through xdotool, ydotool, or wtype    |
-| `src/main/config.ts`              | Settings file and environment overrides                  |
-| `scripts/fetch-needle.sh`         | Downloads the prebuilt engine and Whistle weights        |
-| `vendor/needle/`                  | Engine and weights, gitignored, packaged as resources    |
-| `src/shared/hold-detector.ts`     | Pure push-to-talk state machine                          |
-| `src/shared/keycodes.ts`          | Key labels and Fn helpers                                |
-| `src/hooks/use-push-to-talk.ts`   | React controller for capture and transcription           |
-| `src/components/hold-overlay.tsx` | The compact HUD rendered in its own window               |
-| `src/components/events-view.tsx`  | The transcription list and **Clear all**                 |
-| `src/lib/levels.ts`               | Waveform level sampling and rolling bar history          |
-| `scripts/probe-input.ts`          | Read-only device and permission probe                    |
-| `tests/`                          | Detector, insert, history, config, STT, VAD, level tests |
+| Path                              | Responsibility                                                 |
+| --------------------------------- | -------------------------------------------------------------- |
+| `src/main.ts`                     | Lifecycle, IPC, tray, clipboard, HUD window, XWayland relaunch |
+| `src/main/evdev.ts`               | Device enumeration and raw `input_event` decoding              |
+| `src/main/input-service.ts`       | Detector wiring, learn mode, simulator, status                 |
+| `src/main/stt.ts`                 | ffmpeg conversion, VAD, preview passes, Whistle, rules         |
+| `src/main/vad.ts`                 | Speech-band voice activity detection                           |
+| `src/main/history.ts`             | Transcript store behind **Events**, capped at 200              |
+| `src/main/insert.ts`              | Focused-app typing through xdotool, ydotool, or wtype          |
+| `src/main/config.ts`              | Settings file and environment overrides                        |
+| `scripts/fetch-needle.sh`         | Downloads the prebuilt engine and Whistle weights              |
+| `scripts/make-icons.py`           | Regenerates the app and tray PNG/ICO sets (needs Pillow)       |
+| `assets/icons/`, `assets/tray/`   | Window, package, and tray icons, copied into the asar          |
+| `vendor/needle/`                  | Engine and weights, gitignored, packaged as resources          |
+| `src/shared/hold-detector.ts`     | Pure push-to-talk state machine                                |
+| `src/shared/keycodes.ts`          | Key labels and Fn helpers                                      |
+| `src/shared/text-rules.ts`        | Dictionary, snippets, styles, and engine keywords              |
+| `src/hooks/use-push-to-talk.ts`   | React controller for capture, previews, and transcription      |
+| `src/hooks/use-text-rules.ts`     | React controller for loading and saving text rules             |
+| `src/components/hold-overlay.tsx` | The compact HUD rendered in its own window                     |
+| `src/components/events-view.tsx`  | The transcription list and **Clear all**                       |
+| `src/lib/levels.ts`               | Waveform level sampling and rolling bar history                |
+| `scripts/probe-input.ts`          | Read-only device and permission probe                          |
+| `tests/`                          | Detector, insert, history, config, STT, VAD, level tests       |

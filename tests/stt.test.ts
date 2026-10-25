@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { measureWavLevels, parseCactusOutput } from '../src/main/stt';
+import {
+  measureWavLevels,
+  parseCactusOutput,
+  parseStreamLine,
+} from '../src/main/stt';
 
 function wav(samples: number[]): Buffer {
   const buffer = Buffer.alloc(44 + samples.length * 2);
@@ -55,4 +59,22 @@ test('Cactus CLI silence and malformed output stay distinguishable', () => {
   assert.equal(parseCactusOutput('{"text":"","language":""}')?.text, '');
   assert.equal(parseCactusOutput('not json'), null);
   assert.equal(parseCactusOutput('[]'), null);
+});
+
+test('streamed pieces expose committed text and the pending tail', () => {
+  const committed = parseStreamLine(
+    '{"text":"hello world","words":[],"pending":"this is","language":"en","received":2.0,"pass_ms":120}',
+  );
+  assert.deepEqual(committed, { text: 'hello world', pending: 'this is' });
+
+  assert.deepEqual(parseStreamLine('{"text":"","pending":"","received":1.0}'), {
+    text: '',
+    pending: '',
+  });
+  assert.equal(
+    parseStreamLine('{"pending":"only a tail"}')?.pending,
+    'only a tail',
+  );
+  assert.equal(parseStreamLine('not json'), null);
+  assert.equal(parseStreamLine('   '), null);
 });

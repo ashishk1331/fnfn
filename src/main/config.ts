@@ -1,6 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import {
+  DEFAULT_TEXT_RULES,
+  normalizeTextRules,
+  type TextRules,
+} from '../shared/text-rules';
 import type { InsertPreference } from './insert';
 
 export interface AppConfig {
@@ -13,6 +18,7 @@ export interface AppConfig {
   cactusLanguage: string;
   ffmpegPath: string;
   keepAudio: boolean;
+  textRules: TextRules;
 }
 
 interface SettingsFile {
@@ -25,6 +31,7 @@ interface SettingsFile {
   cactusLanguage?: string;
   ffmpegPath?: string;
   keepAudio?: boolean;
+  textRules?: TextRules;
 }
 
 const SETTINGS_FILE = 'fnfn-settings.json';
@@ -94,6 +101,7 @@ function defaults(appRoot: string): AppConfig {
     cactusLanguage: 'auto',
     ffmpegPath: 'ffmpeg',
     keepAudio: false,
+    textRules: DEFAULT_TEXT_RULES,
   };
 }
 
@@ -163,6 +171,10 @@ function normalize(
       typeof candidate.keepAudio === 'boolean'
         ? candidate.keepAudio
         : base.keepAudio,
+    textRules:
+      candidate.textRules === undefined
+        ? base.textRules
+        : normalizeTextRules(candidate.textRules),
   };
 }
 

@@ -3,8 +3,10 @@ import { Keyboard, LoaderCircle, Mic, TriangleAlert } from 'lucide-react';
 
 import { NoteLine } from '@/components/note-line';
 import type { Note } from '@/hooks/use-push-to-talk';
+import type { TextRulesController } from '@/hooks/use-text-rules';
 import { cn } from '@/lib/utils';
 import { keyLabel } from '@/shared/keycodes';
+import type { TextStyle } from '@/shared/text-rules';
 import type { InputStatus, SttInfo } from '@/shared/types';
 
 interface SystemViewProps {
@@ -13,9 +15,18 @@ interface SystemViewProps {
   startupError: string | null;
   note: Note | null;
   micReady: boolean;
+  text: TextRulesController;
   onToggleLearn: () => void;
   onEnableMic: () => void;
 }
+
+const STYLE_LABELS: Record<TextStyle, string> = {
+  raw: 'As spoken',
+  sentence: 'Sentence case',
+  lower: 'lowercase',
+  upper: 'UPPERCASE',
+  title: 'Title Case',
+};
 
 function Row({
   label,
@@ -106,12 +117,46 @@ function Banner({
   );
 }
 
+function RuleTextarea({
+  label,
+  hint,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[9px] font-medium tracking-[0.13em] text-faint uppercase">
+        {label}
+      </span>
+      <span className="mt-1 block text-[10px] leading-relaxed text-faint">
+        {hint}
+      </span>
+      <textarea
+        value={value}
+        placeholder={placeholder}
+        spellCheck={false}
+        rows={3}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full resize-y rounded-lg border border-line bg-panel px-3 py-2 font-mono text-[11px] leading-relaxed text-ink outline-none transition-colors duration-200 ease-out placeholder:text-faint focus-visible:border-orange/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+      />
+    </label>
+  );
+}
+
 export function SystemView({
   status,
   sttInfo,
   startupError,
   note,
   micReady,
+  text,
   onToggleLearn,
   onEnableMic,
 }: SystemViewProps) {
@@ -202,6 +247,76 @@ export function SystemView({
 
         <Row label="Model" value={sttInfo?.model ?? '—'} mono />
       </dl>
+
+      <section className="overflow-hidden rounded-2xl border border-line bg-panel-2">
+        <div className="border-b border-line/80 px-4 py-3">
+          <h2 className="text-[10px] font-medium tracking-[0.13em] text-faint uppercase">
+            Dictation text
+          </h2>
+          <p className="mt-1 text-[10px] leading-relaxed text-faint">
+            Applied to every transcript before it is typed.
+          </p>
+        </div>
+
+        <label className="flex min-h-[52px] items-center gap-4 border-b border-line/80 px-4 py-3">
+          <span className="w-20 shrink-0 text-[9px] font-medium tracking-[0.13em] text-faint uppercase">
+            Style
+          </span>
+          <span className="min-w-0 flex-1 text-right text-[10px] text-faint">
+            Capitalisation
+          </span>
+          <select
+            value={text.style}
+            onChange={(event) => text.setStyle(event.target.value as TextStyle)}
+            className="h-9 shrink-0 rounded-lg border border-line-strong bg-panel-3 px-2 text-[10px] font-medium tracking-[0.05em] text-dim outline-none transition-colors duration-200 ease-out hover:border-orange/50 hover:text-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+          >
+            {(Object.keys(STYLE_LABELS) as TextStyle[]).map((style) => (
+              <option key={style} value={style}>
+                {STYLE_LABELS[style]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex flex-col gap-4 px-4 py-4">
+          <RuleTextarea
+            label="Dictionary"
+            hint="Correct a word the engine mishears: heard = typed."
+            value={text.dictionaryText}
+            placeholder="cactus whistle = Cactus Whistle"
+            onChange={text.setDictionaryText}
+          />
+          <RuleTextarea
+            label="Snippets"
+            hint="Expand a spoken phrase: say = insert."
+            value={text.snippetsText}
+            placeholder="my email = me@example.com"
+            onChange={text.setSnippetsText}
+          />
+        </div>
+
+        <div className="flex items-center gap-3 border-t border-line/80 px-4 py-3">
+          <ActionButton
+            onClick={() => void text.save()}
+            disabled={text.saving || !text.dirty}
+          >
+            {text.saving ? 'Saving…' : 'Save'}
+          </ActionButton>
+          {text.saved && (
+            <span role="status" className="text-[10px] text-orange">
+              Saved
+            </span>
+          )}
+          {text.error && (
+            <span role="alert" className="min-w-0 text-[10px] text-danger">
+              {text.error}
+            </span>
+          )}
+          <span className="ml-auto hidden text-[10px] text-faint sm:block">
+            One rule per line
+          </span>
+        </div>
+      </section>
 
       {note && <NoteLine note={note} />}
     </div>

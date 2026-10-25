@@ -3,8 +3,11 @@ import {
   BrowserWindow,
   clipboard,
   ipcMain,
+  Menu,
+  nativeImage,
   screen,
   session,
+  Tray,
   type IpcMainInvokeEvent,
 } from 'electron';
 import path from 'node:path';
@@ -15,7 +18,8 @@ import { HistoryStore } from './main/history';
 import { insertTextAtCursor } from './main/insert';
 import { InputService } from './main/input-service';
 import { OVERLAY_BARS } from './lib/levels';
-import { keyName } from './shared/keycodes';
+import { keyLabel, keyName } from './shared/keycodes';
+import { normalizeTextRules, type TextRules } from './shared/text-rules';
 import type {
   HistoryEntry,
   InputStatus,
@@ -104,11 +108,65 @@ const OVERLAY_HIDE_DELAY_MS = 700;
 
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
 let overlayHideTimer: ReturnType<typeof setTimeout> | null = null;
 let inputService: InputService | null = null;
 let sttService: SttService | null = null;
 let historyStore: HistoryStore | null = null;
 let config: AppConfig;
+let textRules: TextRules;
+let isQuitting = false;
+let closeToTray = false;
+
+function assetPath(...parts: string[]): string {
+  return path.join(app.getAppPath(), 'assets', ...parts);
+}
+
+function trayImage(): Electron.NativeImage {
+  const image = nativeImage.createFromPath(assetPath('tray', '22x22.png'));
+  const hiRes = nativeImage.createFromPath(assetPath('tray', '44x44.png'));
+  if (!hiRes.isEmpty()) {
+    image.addRepresentation({ scaleFactor: 2, buffer: hiRes.toPNG() });
+  }
+  return image;
+}
+
+function createTray(): void {
+  if (tray) {
+    return;
+  }
+
+  try {
+    const image = trayImage();
+    if (image.isEmpty()) {
+      throw new Error('tray icon could not be loaded');
+    }
+
+    tray = new Tray(image);
+    tray.setToolTip(`fnfn — hold ${keyLabel(config.holdKeyCode)} to dictate`);
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: 'Show fnfn', click: focusMainWindow },
+        { type: 'separator' },
+        {
+          label: 'Quit fnfn',
+          click: () => {
+            isQuitting = true;
+            app.quit();
+          },
+        },
+      ]),
+    );
+    tray.on('click', focusMainWindow);
+    closeToTray = true;
+  } catch (error) {
+    // Without a tray, hiding the window on close would make the app
+    // unreachable, so closing the window quits instead.
+    console.warn('[app] tray unavailable; closing quits', error);
+    tray = null;
+    closeToTray = false;
+  }
+}
 
 function broadcast(channel: string, payload: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -127,6 +185,7 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#151515',
     autoHideMenuBar: true,
+    icon: assetPath('icons', '256x256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -157,7 +216,13 @@ function createWindow(): void {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
-  mainWindow.on('closed', () => {
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && closeToTray) {
+      event.preventDefault();
+      mainWindow?.hide();
+      return;
+    }
+
     mainWindow = null;
     overlayWindow?.destroy();
   });
@@ -377,6 +442,41 @@ function registerIpc(): void {
     },
   );
 
+  ipcMain.on('stt:preview-start', (): void => {
+    sttService?.startPreview();
+  });
+
+  ipcMain.on(
+    'stt:preview-chunk',
+    (_event, chunk: ArrayBuffer | Uint8Array): void => {
+      if (!sttService) {
+        return;
+      }
+      if (chunk instanceof ArrayBuffer) {
+        sttService.pushPreviewAudio(chunk);
+      } else if (ArrayBuffer.isView(chunk)) {
+        const copy = new Uint8Array(chunk.byteLength);
+        copy.set(chunk);
+        sttService.pushPreviewAudio(copy.buffer);
+      }
+    },
+  );
+
+  ipcMain.on('stt:preview-stop', (): void => {
+    void sttService?.stopPreview();
+  });
+
+  ipcMain.handle('rules:get', (): TextRules => textRules);
+
+  ipcMain.handle(
+    'rules:set',
+    (_event: IpcMainInvokeEvent, payload: unknown): TextRules => {
+      textRules = normalizeTextRules(payload);
+      saveSettings(app.getPath('userData'), { textRules });
+      return textRules;
+    },
+  );
+
   ipcMain.handle(
     'clipboard:write',
     (_event: IpcMainInvokeEvent, text: string): void => {
@@ -416,6 +516,7 @@ app
     const userDataDir = app.getPath('userData');
     const appRoot = app.getAppPath();
     config = loadConfig(userDataDir, appRoot);
+    textRules = config.textRules;
     historyStore = new HistoryStore(userDataDir);
 
     session.defaultSession.setPermissionRequestHandler(
@@ -430,7 +531,14 @@ app
         permission === 'media' && webContents === mainWindow?.webContents,
     );
 
-    sttService = new SttService(config);
+    sttService = new SttService(config, {
+      getTextRules: () => textRules,
+      onPartial: (text) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('stt:partial', text);
+        }
+      },
+    });
     inputService = new InputService({
       holdKey: {
         code: config.holdKeyCode,
@@ -440,6 +548,7 @@ app
       maxHoldMs: config.maxHoldMs,
       onHoldKeyChange: (key) => {
         saveSettings(userDataDir, { holdKeyCode: key.code });
+        tray?.setToolTip(`fnfn — hold ${keyLabel(key.code)} to dictate`);
       },
     });
 
@@ -456,6 +565,7 @@ app
     registerIpc();
     createWindow();
     createOverlayWindow();
+    createTray();
 
     const replaceOverlay = (): void => {
       if (overlayWindow && !overlayWindow.isDestroyed()) {
@@ -482,6 +592,8 @@ app
         if (!overlayWindow) {
           createOverlayWindow();
         }
+      } else {
+        focusMainWindow();
       }
     });
   })
@@ -491,10 +603,14 @@ app
   });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   if (overlayHideTimer) {
     clearTimeout(overlayHideTimer);
     overlayHideTimer = null;
   }
+  void sttService?.stopPreview();
+  tray?.destroy();
+  tray = null;
   inputService?.stop();
 });
 

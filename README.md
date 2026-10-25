@@ -29,12 +29,15 @@ npm start -- --no-sandbox
 
 ## Use
 
-1. Hold **Right Alt**, speak, release. The transcript is typed at the cursor
-   and kept in **Events**.
+1. Hold **Right Alt**, speak, release. Words appear in **Live** while you
+   hold; the finished transcript is typed at the cursor and kept in **Events**.
 2. To choose another key, open **System**, press **Change**, then press the key
    you want to hold.
 3. To test without keyboard permissions, hold the bar at the bottom of **Live**.
-4. If nothing is typed, the transcript is on the clipboard. Install a typing
+4. Add names, snippet triggers, and a capitalisation style in **System** under
+   **Dictation text**.
+5. Close the window to keep fnfn in the tray; **Quit fnfn** is in the tray menu.
+6. If nothing is typed, the transcript is on the clipboard. Install a typing
    tool for your session, then hold again.
 
 ### Permission for the global key
@@ -63,9 +66,11 @@ This is keylogger-level access. Only do it on a machine you control.
 ## Docs
 
 - [Setup details](docs/setup.md) — XWayland, sandbox, packaging
-- [Using fnfn](docs/usage.md) — floating HUD, insert at cursor, the Fn key
+- [Using fnfn](docs/usage.md) — floating HUD, live words, insert at cursor, the Fn key
+- [Dictation text](docs/dictation-text.md) — dictionary, snippets, styles
 - [Configuration](docs/configuration.md) — environment variables, Whistle
 - [Architecture](docs/architecture.md) — how a hold flows, project map
+- [Icons](docs/icons.md) — sizes and formats used by the app, tray, and packages
 - [Troubleshooting](docs/troubleshooting.md) — common failures and fixes
 - [Known limits](docs/limits.md) — what is intentionally out of scope
 

@@ -78,6 +78,12 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
     Array.from({ length: OVERLAY_BARS }, () => 0),
   );
   const simulatingRef = useRef(false);
+  const transcriptRef = useRef(transcript);
+  const previousTranscriptRef = useRef<TranscriptView>(transcript);
+
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
 
   useEffect(() => {
     statusRef.current = inputStatus;
@@ -90,9 +96,9 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
     void window.fnfn.getHistory().then((history) => {
       if (history.length > 0 && phaseRef.current === 'idle') {
         const latest = history[0];
-        setTranscript((prev) =>
-          prev.empty ? { text: latest.text, empty: false, error: false } : prev,
-        );
+        const next = { text: latest.text, empty: false, error: false };
+        previousTranscriptRef.current = next;
+        setTranscript((prev) => (prev.empty ? next : prev));
       }
     });
   }, []);
@@ -101,10 +107,28 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
     return () => {
       cancelAnimationFrame(rafRef.current);
       generationRef.current += 1;
+      window.fnfn?.stopPreview?.();
       micRef.current?.getTracks().forEach((track) => track.stop());
       void meterRef.current?.context.close();
       meterRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    if (!bridgeAvailable()) {
+      return;
+    }
+    return window.fnfn.onPartial((text) => {
+      const trimmed = text.trim();
+      if (
+        !trimmed ||
+        phaseRef.current === 'idle' ||
+        phaseRef.current === 'error'
+      ) {
+        return;
+      }
+      setTranscript({ text: trimmed, empty: false, error: false });
+    });
   }, []);
 
   const setPhase = useCallback((next: Phase) => {
@@ -217,6 +241,17 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
         recorder.addEventListener('dataavailable', (event: BlobEvent) => {
           if (event.data.size > 0) {
             chunks.push(event.data);
+            const chunk = event.data;
+            void chunk
+              .arrayBuffer()
+              .then((buffer) => {
+                if (generation === generationRef.current) {
+                  window.fnfn?.pushPreviewAudio?.(buffer);
+                }
+              })
+              .catch(() => {
+                // A preview is optional; the final blob still transcribes.
+              });
           }
         });
 
@@ -233,6 +268,7 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
           });
         });
 
+        window.fnfn?.startPreview?.();
         recorder.start(100);
 
         return {
@@ -262,8 +298,15 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
 
   const renderResult = useCallback((result: TranscriptionResult) => {
     if (!result.skipped && result.text) {
-      setTranscript({ text: result.text, empty: false, error: false });
+      const next = { text: result.text, empty: false, error: false };
+      previousTranscriptRef.current = next;
+      setTranscript(next);
+      return;
     }
+
+    // Silence or a failed pass: keep the last real transcript instead of
+    // leaving the view blank after a preview replaced it.
+    setTranscript(previousTranscriptRef.current);
   }, []);
 
   /**
@@ -374,6 +417,7 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
   const finishCapture = useCallback(
     (qualified: boolean, heldMs: number) => {
       generationRef.current += 1;
+      window.fnfn?.stopPreview?.();
       const pending = captureRef.current;
       captureRef.current = null;
 
@@ -446,6 +490,8 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
         case 'pending': {
           setPhase('pending');
           startProgress(update.at);
+          previousTranscriptRef.current = transcriptRef.current;
+          setTranscript({ text: '', empty: true, error: false });
           beginCapture();
           setNote(null);
           break;
@@ -467,6 +513,7 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
             setNote(null);
           } else {
             setPhase('idle');
+            setTranscript(previousTranscriptRef.current);
             setNote({
               text: `Tap ignored (${Math.round(
                 update.heldMs,
@@ -482,6 +529,7 @@ export function usePushToTalk(inputStatus: InputStatus | null) {
         case 'cancel': {
           resetProgress();
           setPhase('idle');
+          setTranscript(previousTranscriptRef.current);
           setNote({
             text:
               update.reason === 'other-key'

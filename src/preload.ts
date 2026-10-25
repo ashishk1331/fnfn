@@ -11,6 +11,7 @@ import type {
   SttInfo,
   TranscriptionResult,
 } from './shared/types';
+import type { TextRules } from './shared/text-rules';
 
 function subscribe<T>(
   channel: string,
@@ -42,6 +43,20 @@ const api: FnfnApi = {
     durationMs: number,
   ): Promise<TranscriptionResult> =>
     ipcRenderer.invoke('stt:transcribe', audio, durationMs),
+  startPreview: (): void => {
+    ipcRenderer.send('stt:preview-start');
+  },
+  pushPreviewAudio: (chunk: ArrayBuffer): void => {
+    ipcRenderer.send('stt:preview-chunk', chunk);
+  },
+  stopPreview: (): void => {
+    ipcRenderer.send('stt:preview-stop');
+  },
+  onPartial: (callback: (text: string) => void): (() => void) =>
+    subscribe('stt:partial', callback),
+  getTextRules: (): Promise<TextRules> => ipcRenderer.invoke('rules:get'),
+  setTextRules: (rules: TextRules): Promise<TextRules> =>
+    ipcRenderer.invoke('rules:set', rules),
   copyText: (text: string): Promise<void> =>
     ipcRenderer.invoke('clipboard:write', text),
   insertText: (text: string): Promise<InsertResult> =>

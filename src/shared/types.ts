@@ -1,4 +1,5 @@
 import type { HoldUpdate, KeyRef } from './hold-detector';
+import type { TextRules } from './text-rules';
 
 export type InputState =
   | 'starting'
@@ -77,6 +78,12 @@ export interface FnfnApi {
     audio: ArrayBuffer,
     durationMs: number,
   ) => Promise<TranscriptionResult>;
+  startPreview: () => void;
+  pushPreviewAudio: (chunk: ArrayBuffer) => void;
+  stopPreview: () => void;
+  onPartial: (callback: (text: string) => void) => () => void;
+  getTextRules: () => Promise<TextRules>;
+  setTextRules: (rules: TextRules) => Promise<TextRules>;
   copyText: (text: string) => Promise<void>;
   insertText: (text: string) => Promise<InsertResult>;
   getHistory: () => Promise<HistoryEntry[]>;

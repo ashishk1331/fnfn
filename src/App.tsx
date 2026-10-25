@@ -5,6 +5,7 @@ import { EventsView } from '@/components/events-view';
 import { LiveView } from '@/components/live-view';
 import { SystemView } from '@/components/system-view';
 import { usePushToTalk } from '@/hooks/use-push-to-talk';
+import { useTextRules } from '@/hooks/use-text-rules';
 import { describeError } from '@/lib/format';
 import { viewFromHash, type View } from '@/lib/views';
 import type { InputStatus, SttInfo } from '@/shared/types';
@@ -17,6 +18,7 @@ export default function App() {
     viewFromHash(window.location.hash),
   );
   const ptt = usePushToTalk(inputStatus);
+  const text = useTextRules();
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -104,6 +106,7 @@ export default function App() {
               startupError={startupError}
               note={ptt.note}
               micReady={ptt.micReady}
+              text={text}
               onToggleLearn={() => void ptt.toggleLearn()}
               onEnableMic={() => void ptt.enableMic()}
             />

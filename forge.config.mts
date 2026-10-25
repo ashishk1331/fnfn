@@ -19,16 +19,34 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     extraResource: needleResources,
+    // The Vite plugin otherwise copies only `/.vite`, which would drop the
+    // tray and window icons in `assets`.
+    ignore: (file) => {
+      if (!file) {
+        return false;
+      }
+      return !file.startsWith('/.vite') && !file.startsWith('/assets');
+    },
     download: {
       unsafelyDisableChecksums: true,
     },
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({ setupIcon: './assets/icons/icon.ico' }),
     new MakerZIP({}, ['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({}),
+    new MakerRpm({
+      options: {
+        icon: './assets/icons/512x512.png',
+        categories: ['AudioVideo', 'Utility'],
+      },
+    }),
+    new MakerDeb({
+      options: {
+        icon: './assets/icons/512x512.png',
+        categories: ['AudioVideo', 'Utility'],
+      },
+    }),
   ],
   plugins: [
     new VitePlugin({

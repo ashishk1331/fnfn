@@ -17,7 +17,8 @@ Environment variables override the saved settings file:
 | `FN_DEVTOOLS`       | unset                             | Set to `1` to open DevTools              |
 
 The settings file lives in the Electron user-data directory as
-`fnfn-settings.json`.
+`fnfn-settings.json`. Its `textRules` field holds the dictionary, snippets, and
+style from **System → Dictation text**; edit them in the UI rather than by hand.
 
 ## Whistle
 
@@ -42,7 +43,8 @@ last full sentence, so a long hold does not split words.
 Whistle handles English, German, French, Spanish, Italian, Dutch, and Polish.
 Leave `CACTUS_LANG=auto` to detect the language, or set a code such as `en` to
 force it. `--audio-keywords` takes a file of names and product words to bias
-the decoder toward; fnfn does not pass one yet.
+the decoder toward; fnfn writes one for each pass from the dictionary and
+snippet triggers in [Dictation text](dictation-text.md).
 
 ### Streaming
 
@@ -58,5 +60,11 @@ tail, and `language`, `received`, and `pass_ms` describe the pass. A chunk
 re-transcribes the buffered audio and commits only what two consecutive passes
 agree on, so printed text never changes under the reader.
 
-fnfn does not use streaming yet. A hold is transcribed once, when the key is
-released, because insertion needs the final text.
+The engine only reads complete files; it rejects a FIFO or a file that grows
+while it is open. fnfn therefore does not keep one streaming process alive
+during a hold. Instead it writes the WebM chunks captured so far to a temp
+file every 1.4 seconds, converts and VADs them, and runs `--audio-stream` over
+that clip. Each pass starts from the beginning, so the preview is stable, and
+the accumulated WAV is replaced by the VAD-trimmed version. When the key is
+released, the preview session is aborted and the complete recording goes
+through one plain engine pass; only that final text is typed and stored.

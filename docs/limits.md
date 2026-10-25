@@ -7,16 +7,24 @@
 - Whistle is the only engine. There is no mock or whisper.cpp fallback; a
   missing `vendor/needle` is reported as a transcription error.
 - Whistle runs as a subprocess, so every hold pays process start and weight
-  loading.
-- Streaming (`--audio-stream`) exists in the engine but is not wired into the
-  app yet; the UI only gets text after a hold ends.
+  loading. Previews pay it again for each pass while the key is held.
+- Live previews run every 1.4 seconds on the clip so far, so they lag the last
+  word and cost CPU on long holds. They skip snippets; the final transcript can
+  differ from the last preview.
+- Text rules are plain-text, whole-word, case-insensitive replacements. There
+  is no regex, phonetic matching, or per-application profile, and snippets
+  cannot contain a newline.
+- Rules apply to future holds only; changing them does not rewrite **Events**.
+- The tray needs StatusNotifier or AppIndicator support. Without it, closing
+  the window quits rather than hiding an unreachable app.
+- Icons are shipped as PNG and ICO. There is no macOS `.icns` because no macOS
+  package is built.
 - The VAD is energy-based, not a model. Very loud non-speech can still reach
   Whistle, and quiet speech can be trimmed; there is no per-user calibration.
 - Transcriptions are stored as plain text, unencrypted, in the app's user-data
   directory. Only the 200 most recent are kept.
 - A compositor that refuses always-on-top will keep the HUD behind other
   windows.
-- No dictionary, snippets, styles, or tray icon yet.
 - Recording while another key is pressed is treated as a shortcut and
   cancelled, not as dictation.
 

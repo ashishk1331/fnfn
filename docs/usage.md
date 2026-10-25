@@ -15,6 +15,26 @@ successful transcription is also listed in **Events**, newest first.
 Pressing another key while holding the talk key is treated as a shortcut and
 cancels the hold.
 
+## Live words
+
+From about a second into a hold, **Live** starts showing words before you
+release. The preview is replaced as more speech is recognised; it is never
+typed or stored. When you release, one final pass transcribes the complete
+recording, applies your [dictation text](dictation-text.md) rules, and only that
+text is typed and added to **Events**.
+
+The preview runs on the whole clip captured so far rather than one long-lived
+engine process. It costs a little CPU during longer holds and can lag the last
+word by about a second, but the final pass never waits for a preview to finish.
+
+## Tray
+
+Closing the window hides fnfn to the tray; the microphone and the hold key keep
+working. The tray menu has **Show fnfn** and **Quit fnfn**, and clicking the
+icon focuses the window. On a desktop without a tray (no StatusNotifier or
+AppIndicator support), closing the window quits instead, so the app cannot
+become unreachable.
+
 ## Changing the key
 
 Open **System** and press **Change**, then press the key you want. Learning mode
