@@ -1,3 +1,5 @@
+![Banner](banner.png)
+
 # fnfn
 
 Hold-to-talk dictation for Linux. Hold a key, speak, release: the transcript is
