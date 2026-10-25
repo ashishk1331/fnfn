@@ -5,16 +5,17 @@ window and tray read the same files in development and in a package.
 
 ## Sizes
 
-| Use                           | File                                  | Sizes                                   |
-| ----------------------------- | ------------------------------------- | --------------------------------------- |
-| Tray, Linux default           | `assets/tray/22x22.png`               | 22×22                                   |
-| Tray, HiDPI                   | `assets/tray/44x44.png`               | 44×44 (2×)                              |
-| Tray, desktop-environment set | `assets/tray/{16,24,32,48}x*.png`     | 16, 24, 32, 48                          |
-| Tray convenience copies       | `assets/tray/tray.png`, `tray@2x.png` | 22, 44                                  |
-| Window and dock               | `assets/icons/256x256.png`            | 256                                     |
-| Launcher icon set             | `assets/icons/{16..1024}x*.png`       | 16, 24, 32, 48, 64, 128, 256, 512, 1024 |
-| Debian and RPM package icon   | `assets/icons/512x512.png`            | 512 PNG                                 |
-| Windows installer icon        | `assets/icons/icon.ico`               | 16–256 multi-size ICO                   |
+| Use                           | File                                  | Sizes                                    |
+| ----------------------------- | ------------------------------------- | ---------------------------------------- |
+| Tray, Linux default           | `assets/tray/22x22.png`               | 22×22                                    |
+| Tray, HiDPI                   | `assets/tray/44x44.png`               | 44×44 (2×)                               |
+| Tray, desktop-environment set | `assets/tray/{16,24,32,48}x*.png`     | 16, 24, 32, 48                           |
+| Tray convenience copies       | `assets/tray/tray.png`, `tray@2x.png` | 22, 44                                   |
+| Window and dock               | `assets/icons/256x256.png`            | 256                                      |
+| Launcher icon set             | `assets/icons/{16..1024}x*.png`       | 16, 24, 32, 48, 64, 128, 256, 512, 1024  |
+| Debian and RPM package icon   | `assets/icons/512x512.png`            | 512 PNG                                  |
+| Windows installer icon        | `assets/icons/icon.ico`               | 16–256 multi-size ICO                    |
+| Sidebar brand mark            | `assets/icons/bare-icon.svg`          | SVG, copied from `artwork/bare-icon.svg` |
 
 `assets/icons/icon.png` is a 512×512 convenience copy.
 
@@ -29,8 +30,10 @@ dock. The `.deb` and `.rpm` makers take the 512 PNG, and Squirrel takes the
 - macOS `.icns`: no macOS package is built (`MakerZIP` targets darwin, but the
   app has not been tested there). If that changes, add 16–512 at 1× and 2× in
   an `.icns` and point the packager at it.
-- Vector files in `assets/`: the committed icons are raster. Keep SVG masters
-  in `artwork/` and generate from them with `npm run icons`.
+- Vector files in `assets/`: the committed icons are raster, except the
+  sidebar mark, which is bundled as SVG so it stays crisp. Keep the SVG
+  masters in `artwork/` and generate the raster sets from them with
+  `npm run icons`.
 
 ## Regenerating
 

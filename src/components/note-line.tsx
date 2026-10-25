@@ -9,7 +9,7 @@ export function NoteLine({ note }: { note: Note }) {
       role={note.tone === 'error' ? 'alert' : 'status'}
       className={cn(
         'flex items-start gap-2 text-[11px] leading-relaxed',
-        note.tone === 'error' ? 'text-danger' : 'text-orange',
+        note.tone === 'error' ? 'text-danger' : 'text-warn',
       )}
     >
       <TriangleAlert

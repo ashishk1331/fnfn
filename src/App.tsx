@@ -83,7 +83,7 @@ export default function App() {
         tabIndex={-1}
         className="min-w-0 flex-1 overflow-y-auto outline-none"
       >
-        <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col px-7 py-7">
+        <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col px-6 py-6">
           {view === 'live' && (
             <LiveView
               status={inputStatus}

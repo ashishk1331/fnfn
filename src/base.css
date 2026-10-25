@@ -24,7 +24,7 @@ body {
   font-size: var(--text-md);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  caret-color: var(--color-orange);
+  caret-color: var(--color-accent);
 }
 
 #root {
@@ -37,7 +37,7 @@ h3 {
   margin: 0;
   min-width: 0;
   overflow-wrap: break-word;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-synthesis: none;
   text-wrap: balance;
 }
@@ -45,13 +45,6 @@ h3 {
 p {
   margin: 0;
   text-wrap: pretty;
-}
-
-/* One quiet raised surface for cards and the hold bar. */
-.surface {
-  border: 1px solid var(--color-line);
-  background-color: var(--color-panel-2);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
 }
 
 /* The floating hold HUD is its own transparent, click-through window. */
@@ -66,10 +59,11 @@ html.overlay-surface #root {
 }
 
 .overlay-card {
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 14px;
-  background: rgb(28 26 32 / 94%);
-  box-shadow: 0 12px 30px -12px rgb(0 0 0 / 70%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  background: rgb(8 8 8 / 94%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  backdrop-filter: blur(12px);
 }
 
 .overlay-bar {
@@ -82,7 +76,7 @@ html.overlay-surface #root {
 }
 
 .overlay-bar-head {
-  background: var(--color-orange);
+  background: var(--color-rec);
   opacity: 1;
 }
 
@@ -94,8 +88,8 @@ html.overlay-surface #root {
 }
 
 .overlay-dot-live {
-  background: var(--color-orange);
-  box-shadow: 0 0 0 3px rgb(255 106 61 / 16%);
+  background: var(--color-rec);
+  box-shadow: 0 0 0 3px rgb(255 56 60 / 16%);
   animation: overlay-pulse 1.4s ease-in-out infinite;
 }
 
@@ -155,8 +149,8 @@ pre {
 }
 
 ::selection {
-  background: var(--color-orange);
-  color: var(--color-orange-ink);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
 }
 
 ::-webkit-scrollbar {

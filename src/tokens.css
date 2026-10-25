@@ -3,26 +3,26 @@
   --text-sm: 0.8125rem;
   --text-md: 0.875rem;
 
-  --color-shell: #17151a;
-  --color-panel: #1c1a20;
-  --color-panel-2: #211e26;
-  --color-panel-3: #2a262f;
-  --color-ink: #f3efe9;
-  --color-dim: #a7a099;
-  --color-faint: #928b82;
-  --color-line: #302c35;
-  --color-line-strong: #443f4b;
-  --color-orange: #ff6a3d;
-  --color-orange-ink: #1a0e08;
-  --color-orange-soft: #3a1d13;
-  --color-danger: #ff7a66;
-  --color-sage: #a9b99b;
+  --color-shell: #151515;
+  --color-panel: #050505;
+  --color-panel-2: #101010;
+  --color-panel-3: #1a1a1a;
+  --color-ink: #f4f4ef;
+  --color-dim: #8c8c86;
+  --color-faint: #5f5f5a;
+  --color-line: #262626;
+  --color-line-strong: #3b3b38;
+  --color-accent: #864af9;
+  --color-accent-ink: #0b0614;
+  --color-warn: #ff5a1f;
+  --color-warn-soft: #2b1209;
+  --color-rec: #ff383c;
+  --color-rec-soft: #300c0e;
+  --color-danger: #ff6b57;
 
-  --font-sans:
-    'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
-    sans-serif;
-  --font-mono:
+  --font-body:
     'IBM Plex Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
     'Liberation Mono', monospace;
-  --font-body: var(--font-sans);
+  --font-mono: var(--font-body);
+  --font-sans: var(--font-body);
 }

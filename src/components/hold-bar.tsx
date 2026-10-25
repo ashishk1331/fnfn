@@ -76,19 +76,19 @@ export function HoldBar({
         }
       }}
       className={cn(
-        'surface group relative flex h-[80px] w-full shrink-0 touch-none items-center gap-3.5 overflow-hidden rounded-2xl px-4 text-left outline-none transition-colors duration-200 ease-out select-none focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-orange',
-        active && 'border-orange/40 bg-orange-soft/25',
-        failed && 'border-danger/35 bg-panel-3',
-        !active && !failed && 'hover:border-line-strong',
+        'group relative flex h-[76px] w-full shrink-0 touch-none items-center gap-3 overflow-hidden rounded-2xl border px-4 text-left outline-none transition-colors duration-200 ease-out select-none focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-accent',
+        active && 'border-rec/45 bg-rec-soft/35',
+        failed && 'border-danger/40 bg-panel-3',
+        !active && !failed && 'border-line bg-panel-3 hover:border-line-strong',
         busy && 'cursor-progress',
       )}
     >
       <span
         className={cn(
-          'flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors duration-200 ease-out',
-          active && 'border-orange/40 bg-orange/10 text-orange',
-          failed && 'border-danger/35 bg-panel-2 text-danger',
-          !active && !failed && 'border-line bg-panel text-dim',
+          'flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors duration-200 ease-out',
+          active && 'border-rec/50 bg-rec/10 text-rec',
+          failed && 'border-danger/40 bg-panel-2 text-danger',
+          !active && !failed && 'border-line bg-panel-2 text-dim',
         )}
       >
         <Icon
@@ -100,17 +100,17 @@ export function HoldBar({
 
       <span
         aria-live="polite"
-        className="min-w-0 flex-1 truncate text-[13.5px] font-medium tracking-[-0.01em] text-ink"
+        className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-[-0.01em] text-ink"
       >
         {actionLabel[phase]}
       </span>
 
       <kbd
         className={cn(
-          'inline-flex h-8 shrink-0 items-center justify-center rounded-full border px-3 font-mono text-[9px] font-medium tracking-[0.11em] uppercase',
-          active && 'border-orange/35 bg-orange/10 text-orange',
-          failed && 'border-danger/30 bg-panel-2 text-danger',
-          !active && !failed && 'border-line-strong bg-panel text-dim',
+          'inline-flex h-7 shrink-0 items-center justify-center rounded-md border px-2 text-[10px] font-medium tracking-[0.08em] uppercase',
+          active && 'border-rec/40 bg-rec/10 text-rec',
+          failed && 'border-danger/35 bg-panel-2 text-danger',
+          !active && !failed && 'border-line-strong bg-panel-2 text-dim',
         )}
       >
         {keycap}
@@ -118,10 +118,10 @@ export function HoldBar({
 
       <span
         aria-hidden="true"
-        className="absolute inset-x-0 bottom-0 h-[2px] bg-line"
+        className="absolute inset-x-0 bottom-0 h-px bg-line"
       >
         <span
-          className="block h-full bg-orange"
+          className="block h-full bg-rec"
           style={{ width: `${clamped * 100}%` }}
         />
       </span>
