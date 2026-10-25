@@ -183,7 +183,7 @@ function createWindow(): void {
     minWidth: 680,
     minHeight: 480,
     show: false,
-    backgroundColor: '#151515',
+    backgroundColor: '#17151a',
     autoHideMenuBar: true,
     icon: assetPath('icons', '256x256.png'),
     webPreferences: {

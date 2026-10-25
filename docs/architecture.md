@@ -156,7 +156,7 @@ window with `showInactive()`, and hides it 700 ms after the phase goes idle.
 | `src/main/insert.ts`              | Focused-app typing through xdotool, ydotool, or wtype          |
 | `src/main/config.ts`              | Settings file and environment overrides                        |
 | `scripts/fetch-needle.sh`         | Downloads the prebuilt engine and Whistle weights              |
-| `scripts/make-icons.py`           | Regenerates the app and tray PNG/ICO sets (needs Pillow)       |
+| `scripts/make-icons.ts`           | Rasterizes app and tray SVG masters into PNG/ICO sets          |
 | `assets/icons/`, `assets/tray/`   | Window, package, and tray icons, copied into the asar          |
 | `vendor/needle/`                  | Engine and weights, gitignored, packaged as resources          |
 | `src/shared/hold-detector.ts`     | Pure push-to-talk state machine                                |

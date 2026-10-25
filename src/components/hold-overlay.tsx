@@ -52,7 +52,7 @@ export function HoldOverlay() {
         }
       />
 
-      <span className="w-[60px] shrink-0 text-[9px] font-medium tracking-[0.12em] text-dim uppercase">
+      <span className="w-[60px] shrink-0 font-mono text-[9px] font-medium tracking-[0.12em] text-dim uppercase">
         {label[state.phase]}
       </span>
 

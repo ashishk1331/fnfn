@@ -3,6 +3,8 @@ import { Check, Copy, LoaderCircle, Mic, TriangleAlert } from 'lucide-react';
 
 import { HoldBar } from '@/components/hold-bar';
 import { NoteLine } from '@/components/note-line';
+import { PageHeader } from '@/components/page-header';
+import { Pill, StatusDot } from '@/components/pill';
 import type { Note, Phase, TranscriptView } from '@/hooks/use-push-to-talk';
 import { cn } from '@/lib/utils';
 import { keyLabel } from '@/shared/keycodes';
@@ -19,6 +21,58 @@ interface LiveViewProps {
   onSimulateUp: () => void;
 }
 
+function PhasePill({
+  status,
+  startupError,
+  phase,
+}: {
+  status: InputStatus | null;
+  startupError: string | null;
+  phase: Phase;
+}) {
+  if (startupError) {
+    return <Pill tone="danger">Unavailable</Pill>;
+  }
+  if (status?.state === 'degraded' || status?.state === 'unsupported') {
+    return <Pill tone="live">Keyboard off</Pill>;
+  }
+  if (status?.state === 'error') {
+    return <Pill tone="danger">Input error</Pill>;
+  }
+  if (phase === 'recording' || phase === 'pending') {
+    return (
+      <Pill tone="live">
+        <StatusDot />
+        {phase === 'recording' ? 'Listening' : 'Starting'}
+      </Pill>
+    );
+  }
+  if (phase === 'transcribing') {
+    return (
+      <Pill tone="neutral">
+        <LoaderCircle
+          className="size-3 animate-spin"
+          strokeWidth={1.7}
+          aria-hidden="true"
+        />
+        Transcribing
+      </Pill>
+    );
+  }
+  if (phase === 'error') {
+    return <Pill tone="danger">Try again</Pill>;
+  }
+  if (!status || status.state === 'starting') {
+    return <Pill tone="neutral">Starting</Pill>;
+  }
+  return (
+    <Pill tone="success">
+      <StatusDot tone="success" />
+      Ready
+    </Pill>
+  );
+}
+
 function InputState({
   status,
   startupError,
@@ -30,7 +84,7 @@ function InputState({
     return (
       <div
         role="alert"
-        className="mb-4 flex items-center gap-2 text-[11px] text-danger"
+        className="flex items-center gap-2 rounded-xl border border-danger/25 bg-danger/5 px-4 py-2.5 text-[11.5px] text-danger"
       >
         <TriangleAlert
           className="size-3.5 shrink-0"
@@ -40,7 +94,7 @@ function InputState({
         <span>App bridge unavailable</span>
         <a
           href="#system"
-          className="ml-auto text-dim underline decoration-line-strong underline-offset-4 hover:text-ink"
+          className="ml-auto rounded-full border border-danger/25 px-2.5 py-1 font-mono text-[9px] tracking-[0.1em] uppercase transition-colors hover:bg-danger/10"
         >
           System
         </a>
@@ -63,8 +117,10 @@ function InputState({
     <div
       role="status"
       className={cn(
-        'mb-4 flex items-center gap-2 text-[11px]',
-        status.state === 'error' ? 'text-danger' : 'text-orange',
+        'flex items-center gap-2 rounded-xl border px-4 py-2.5 text-[11.5px]',
+        status.state === 'error'
+          ? 'border-danger/25 bg-danger/5 text-danger'
+          : 'border-orange/25 bg-orange-soft/25 text-orange',
       )}
     >
       <TriangleAlert
@@ -75,7 +131,12 @@ function InputState({
       <span>{label}</span>
       <a
         href="#system"
-        className="ml-auto text-dim underline decoration-line-strong underline-offset-4 hover:text-ink"
+        className={cn(
+          'ml-auto rounded-full border px-2.5 py-1 font-mono text-[9px] tracking-[0.1em] uppercase transition-colors',
+          status.state === 'error'
+            ? 'border-danger/25 hover:bg-danger/10'
+            : 'border-orange/25 hover:bg-orange/10',
+        )}
       >
         System
       </a>
@@ -87,32 +148,52 @@ function EmptyState({ phase }: { phase: Phase }) {
   const active = phase === 'pending' || phase === 'recording';
   const busy = phase === 'transcribing';
   const failed = phase === 'error';
+  const title = active
+    ? 'Listening'
+    : busy
+      ? 'Transcribing'
+      : failed
+        ? 'That take failed'
+        : 'Ready when you are';
+  const hint = active
+    ? 'Keep holding, then release to finish.'
+    : busy
+      ? 'The finished transcript lands here.'
+      : failed
+        ? 'Hold the key and try again.'
+        : 'Hold the key and speak.';
 
   return (
     <div className="flex flex-1 items-center justify-center">
-      <div
-        className={cn(
-          'flex size-[68px] items-center justify-center rounded-full border transition-colors duration-300',
-          active && 'border-orange/45 bg-orange-soft/35 text-orange',
-          failed && 'border-danger/40 bg-panel-2 text-danger',
-          !active && !failed && 'border-line bg-panel-2 text-faint',
-        )}
-      >
-        {busy ? (
-          <LoaderCircle
-            className="size-6 animate-spin"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
-        ) : failed ? (
-          <TriangleAlert
-            className="size-6"
-            strokeWidth={1.6}
-            aria-hidden="true"
-          />
-        ) : (
-          <Mic className="size-6" strokeWidth={1.6} aria-hidden="true" />
-        )}
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span
+          className={cn(
+            'flex size-16 items-center justify-center rounded-full border transition-colors duration-300',
+            active && 'border-orange/40 bg-orange-soft/30 text-orange',
+            failed && 'border-danger/35 bg-danger/5 text-danger',
+            !active && !failed && 'border-line bg-panel-3/50 text-faint',
+          )}
+        >
+          {busy ? (
+            <LoaderCircle
+              className="size-6 animate-spin"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          ) : failed ? (
+            <TriangleAlert
+              className="size-6"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          ) : (
+            <Mic className="size-6" strokeWidth={1.6} aria-hidden="true" />
+          )}
+        </span>
+        <div>
+          <p className="text-[13px] font-medium text-dim">{title}</p>
+          <p className="mt-1 text-[11px] text-faint">{hint}</p>
+        </div>
       </div>
     </div>
   );
@@ -180,57 +261,68 @@ export function LiveView({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col gap-5">
+      <PageHeader
+        title="Live"
+        description={`Hold ${key} and speak. Release to type it at your cursor.`}
+        actions={
+          <PhasePill
+            status={status}
+            startupError={startupError}
+            phase={phase}
+          />
+        }
+      />
+
       <InputState status={status} startupError={startupError} />
 
       <section
         aria-label="Transcript"
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        className="surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl"
       >
-        {canCopy && (
-          <div className="flex shrink-0 justify-end pb-4">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line/70 px-5 py-3">
+          <span className="font-mono text-[9px] tracking-[0.14em] text-faint uppercase">
+            Transcript
+          </span>
+          {canCopy && (
             <button
               type="button"
               onClick={() => void copyTranscript()}
               title="Copy transcript"
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-line bg-panel-2 px-3.5 text-[10px] font-medium tracking-[0.1em] text-dim uppercase outline-none transition-colors duration-200 ease-out hover:border-line-strong hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong bg-panel-3/50 px-3 font-mono text-[9px] font-medium tracking-[0.11em] text-dim uppercase outline-none transition-colors duration-200 ease-out hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange"
             >
               {copied ? (
                 <Check
-                  className="size-3.5"
-                  strokeWidth={1.7}
+                  className="size-3"
+                  strokeWidth={1.8}
                   aria-hidden="true"
                 />
               ) : copyFailed ? (
                 <TriangleAlert
-                  className="size-3.5"
-                  strokeWidth={1.7}
+                  className="size-3"
+                  strokeWidth={1.8}
                   aria-hidden="true"
                 />
               ) : (
-                <Copy
-                  className="size-3.5"
-                  strokeWidth={1.7}
-                  aria-hidden="true"
-                />
+                <Copy className="size-3" strokeWidth={1.8} aria-hidden="true" />
               )}
               <span aria-live="polite">
                 {copied ? 'Copied' : copyFailed ? 'Copy failed' : 'Copy'}
               </span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         <div
           aria-live="polite"
           aria-atomic="true"
           aria-busy={phase === 'transcribing'}
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5"
         >
           {hasText ? (
             <p
               className={cn(
-                'max-w-[62ch] text-[17px] leading-[1.7] break-words whitespace-pre-wrap text-ink',
+                'max-w-[62ch] font-mono text-[16px] leading-[1.8] break-words whitespace-pre-wrap text-ink',
                 transcript.error && 'text-danger',
               )}
             >
@@ -244,15 +336,13 @@ export function LiveView({
 
       {note && <NoteLine note={note} />}
 
-      <div className="mt-4 shrink-0">
-        <HoldBar
-          keyName={key}
-          phase={phase}
-          progress={progress}
-          onDown={onSimulateDown}
-          onUp={onSimulateUp}
-        />
-      </div>
+      <HoldBar
+        keyName={key}
+        phase={phase}
+        progress={progress}
+        onDown={onSimulateDown}
+        onUp={onSimulateUp}
+      />
     </div>
   );
 }

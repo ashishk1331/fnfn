@@ -29,19 +29,42 @@ dock. The `.deb` and `.rpm` makers take the 512 PNG, and Squirrel takes the
 - macOS `.icns`: no macOS package is built (`MakerZIP` targets darwin, but the
   app has not been tested there). If that changes, add 16–512 at 1× and 2× in
   an `.icns` and point the packager at it.
-- SVG sources: the artwork is generated at raster sizes; there is no vector
-  master.
+- Vector files in `assets/`: the committed icons are raster. Keep SVG masters
+  in `artwork/` and generate from them with `npm run icons`.
 
 ## Regenerating
 
-The icons are committed, so a normal build does not touch them. To change the
-artwork, edit `scripts/make-icons.py` and run:
+The icons are committed, so a normal build does not touch them. The generator
+is TypeScript and uses `@resvg/resvg-js` from the dev dependencies.
 
-```bash
-python3 -m pip install pillow
-python3 scripts/make-icons.py
+The masters are fixed paths:
+
+```
+artwork/app-icon.svg    app, window, and package icon
+artwork/tray-icon.svg   tray icon
 ```
 
-The script redraws the dark rounded-square app icon and the transparent orange
+```bash
+npm run icons
+```
+
+Each size is rasterized at its final dimensions, so 16×16 and 22×22 stay crisp.
+Both masters must be square, and the tray background must stay transparent.
+
+To preview without touching the committed files, add `--out`:
+
+```bash
+npm run icons -- --out /tmp/icons
+```
+
+A missing master falls back to the built-in artwork; the last line of output
+names the masters used.
+
+### From the built-in artwork
+
+Edit `appSvg()` or `traySvg()` in `scripts/make-icons.ts`, then run
+`npm run icons`.
+
+The script writes the dark rounded-square app icon and the transparent orange
 tray waveform at every size above. Check the 16×16 and 22×22 results by eye
 before committing; small sizes lose the thin border quickly.
